@@ -1,4 +1,6 @@
 # 내 3DGS 모델에서 거리 측정하기
+
+> 💡 **더 쉬운 길**: 설치·변환 없이 브라우저에서 바로 재는 웹앱이 있습니다 → **https://rocheol2.github.io/3DGS_Accurate_Point_Mesurement/** (사용법: [웹앱_사용법.md](웹앱_사용법.md)). 아래는 원 논문 도구(Cesium)를 그대로 재현하는 경로입니다.
 ## Deng & Qin (2026) "Accurate Point Measurement in 3DGS" 방법 재현 튜토리얼
 
 작성일 2026-09-05 · 대상 환경: 이 워크스테이션(Ubuntu, TITAN RTX, conda) · 작업 폴더 `~/storage/Cesium`

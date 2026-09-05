@@ -9,7 +9,7 @@ Stereoscopic-View Based Measurements* ([arXiv 2603.24716](https://arxiv.org/abs/
 
 **[webapp/](webapp/)** — 3DGS 파일(.ply/.spz/.splat/.ksplat/.sog)을 끌어다 놓고, 같은 점을 여러 각도에서 클릭하면 좌표와 거리가 바로 표시되는 정적 웹앱. Cesium·3D Tiles·Node 서버 없이 동작하며 파일은 컴퓨터 밖으로 나가지 않습니다.
 - 안내선(에피폴라 선)·확대창·자동 정밀 보정·자동 회전으로 다시점 클릭을 돕고, 축척 등 **없는 정보는 무엇이 없어서 안 되는지** 정확히 알립니다(E01~E13).
-- 열기: GitHub Pages 를 켜면 `https://rocheol2.github.io/3DGS_Accurate_Point_Mesurement/` (Settings → Pages → main / root). 로컬: `python3 -m http.server 8000` → `http://localhost:8000/webapp/`
+- 열기: ① **온라인 https://rocheol2.github.io/3DGS_Accurate_Point_Mesurement/** (배포됨) ② `webapp/dist/3DGS_거리측정기_단일파일.html` 더블클릭(서버·인터넷 불필요) ③ `tools/start_webapp.sh`(로컬 서버 + 브라우저 자동 실행). ⚠ `webapp/index.html` 을 직접 더블클릭하면 브라우저가 스크립트를 차단해 동작하지 않습니다.
 - 문서: [웹앱_사용법.md](웹앱_사용법.md) · [웹앱_작업결과_보고서.md](웹앱_작업결과_보고서.md) · 앱 안 도움말 [webapp/help.html](webapp/help.html) · 첫 방문 시 기능 소개 투어 자동 실행
 - 검증: 합성 2.000 m 정육면체 5시점 클릭 → 3D 오차 2.5~3.6 mm, 거리 2.0019 ± 0.0036 m (헤드리스 Chrome 자동 테스트)
 
