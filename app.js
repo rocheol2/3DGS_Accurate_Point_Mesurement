@@ -12,7 +12,7 @@ const DEG = Math.PI / 180;
 
 // ------------------------------------------------------------------ 상태
 const state = {
-  file: null, header: null, mesh: null, bounds: null,
+  file: null, header: null, mesh: null, bounds: null, centers: null,
   unit: { known: false, factor: 1, sigmaRel: 0, source: '' },
   upSource: null,
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
@@ -45,6 +45,8 @@ function initGL() {
   controls.zoomToCursor = true;
   controls.screenSpacePanning = true;
   controls.rotateSpeed = 0.7;
+  controls.enableZoom = false; // 휠 줌은 아래 onWheel 이 표면 깊이를 알고 처리 (OrbitControls 는 표면을 몰라 뚫고 지나감)
+  renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
   renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
   resize();
   window.addEventListener('resize', resize);
@@ -63,10 +65,16 @@ function resize() {
   octx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 function viewSize() { return { w: glHost.clientWidth, h: glHost.clientHeight }; }
+function updateClipPlanes() {
+  const d = Math.max(1e-4, controls.target.distanceTo(camera.position)); const R = state.bounds?.radius || 10;
+  const near = THREE.MathUtils.clamp(d * 0.02, 1e-4, R * 0.01); // 가까이 가면 near 도 함께 줄어 표면이 잘리지 않음
+  if (Math.abs(camera.near - near) / near > 0.15) { camera.near = near; camera.far = Math.max(R * 300, near * 1e6); camera.updateProjectionMatrix(); }
+}
 function loop() {
   requestAnimationFrame(loop);
   tickAnimations();
   controls.update();
+  if (state.bounds) updateClipPlanes();
   if (state.mesh) renderer.render(scene, camera);
   drawOverlay();
   updateLoupe();
@@ -95,11 +103,13 @@ function frameAll() {
   const dir = h.multiplyScalar(Math.cos(az)).add(h2.multiplyScalar(Math.sin(az))).multiplyScalar(Math.cos(el)).add(up.clone().multiplyScalar(Math.sin(el)));
   camera.position.copy(center).add(dir.multiplyScalar(radius * 2.2));
   controls.target.copy(center);
-  camera.near = Math.max(1e-4, radius * 0.001); camera.far = radius * 200; camera.updateProjectionMatrix();
+  camera.near = Math.max(1e-4, radius * 0.02); camera.far = radius * 300; camera.updateProjectionMatrix();
   controls.update();
 }
 function setUp(v, source) {
   camera.up.copy(v).normalize(); state.upSource = source;
+  // OrbitControls 는 생성 시점의 up 으로 회전축(_quat)을 고정하므로 up 변경 시 직접 갱신 (안 하면 회전이 옛 축으로 돎)
+  if (controls._quat) { controls._quat.setFromUnitVectors(camera.up, new THREE.Vector3(0, 1, 0)); controls._quatInverse.copy(controls._quat).invert(); }
   const names = { '0,-1,0': '−Y', '0,1,0': '+Y', '0,0,1': '+Z', '0,0,-1': '−Z', '1,0,0': '+X', '-1,0,0': '−X' };
   $('#up-label').textContent = names[[v.x, v.y, v.z].join(',')] || '사용자';
   if (state.bounds) frameAll();
@@ -120,6 +130,57 @@ function autoRotate(dAzDeg = 35) {
     camera.position.copy(center).add(new THREE.Vector3().setFromSpherical(s).applyQuaternion(qi));
     controls.target.lerpVectors(tFrom, center, e);
   });
+}
+// 커서 광선 주변(각도 원뿔) 가우시안 중심들로 '커서 아래 표면 점'을 추정. state.centers 는 로드 시 저장한 표본(최대 20만 점)
+// 반환: { t: 카메라로부터의 거리, point: 표면 점 군집의 3D 중심 } 또는 null
+function surfaceHitAlongRay(o, d, pxRadius = 10) {
+  const C = state.centers; if (!C) return null;
+  const f = focalPx(); const tanA = pxRadius / f; const hits = [];
+  for (let i = 0; i < C.length; i += 3) {
+    const vx = C[i] - o.x, vy = C[i + 1] - o.y, vz = C[i + 2] - o.z;
+    const t = vx * d.x + vy * d.y + vz * d.z; if (t <= 1e-6) continue;
+    const perp2 = vx * vx + vy * vy + vz * vz - t * t; const lim = t * tanA;
+    if (perp2 < lim * lim) hits.push({ t, i });
+  }
+  if (hits.length < 3) return pxRadius < 30 ? surfaceHitAlongRay(o, d, pxRadius * 2.5) : null;
+  hits.sort((a, b) => a.t - b.t);
+  // 가장 앞쪽 '점 군집'을 표면으로 택한다: 깊이가 12 % 안에 K점 이상 모인 첫 구간. 앞의 외톨이 잡티는 건너뛰고,
+  // 커서가 물체를 살짝 벗어나도 뒤쪽 배경(바닥·벽)으로 튀지 않도록 앞 군집을 우선한다.
+  const K = Math.max(3, Math.floor(hits.length * 0.03));
+  let s0 = -1;
+  for (let a = 0; a + K - 1 < hits.length; a++) { if (hits[a + K - 1].t <= hits[a].t * 1.12) { s0 = a; break; } }
+  if (s0 < 0) s0 = Math.max(0, Math.floor(hits.length * 0.15) - Math.floor(K / 2));
+  const pt = new THREE.Vector3(); let n = 0;
+  for (let a = s0; a < Math.min(hits.length, s0 + K); a++) { const k = hits[a].i; pt.x += C[k]; pt.y += C[k + 1]; pt.z += C[k + 2]; n++; }
+  pt.divideScalar(n);
+  return { t: pt.distanceTo(o), point: pt };
+}
+function onWheel(e) {
+  if (!state.mesh) return; e.preventDefault();
+  const r = renderer.domElement.getBoundingClientRect(); const px = e.clientX - r.left, py = e.clientY - r.top;
+  const ray = rayFromPixel(px, py); const o = camera.position.clone();
+  const viewDir = camera.getWorldDirection(new THREE.Vector3());
+  const tTarget = Math.max(1e-3, controls.target.clone().sub(o).dot(viewDir));
+  let hit = surfaceHitAlongRay(o, ray.d);
+  // 연속성: 마우스를 움직이지 않고 계속 굴리는 중에 커서가 물체를 비껴가 추정이 훨씩 먼 배경으로 넘어가면(1.5배 이상) 이전 깊이를 유지.
+  // 마우스를 3 px 이상 움직였다면 새 대상으로 의도한 것으로 보고 새 추정을 따른다.
+  const zm = state.zoomMouse; const mouseMoved = !zm || Math.hypot(px - zm.x, py - zm.y) > 3; state.zoomMouse = { x: px, y: py };
+  if (hit && !mouseMoved && state.lastZoom && hit.t > 1.5 * tTarget) hit = null;
+  // 이동 방향: 표면 점 군집의 중심을 향해 (커서 픽셀 정수 반올림 때문에 광선이 물체를 0.5 px 비껴가도, 보고 있던 표면 점이 화면에 고정됨)
+  const dirMove = hit ? hit.point.clone().sub(o).normalize() : ray.d.clone();
+  const tHit = hit ? hit.t : tTarget;                      // 표면을 못 찾으면 현재 궤도 중심 깊이
+  let delta = e.deltaY; if (e.deltaMode === 1) delta *= 16; else if (e.deltaMode === 2) delta *= 400;
+  const k = Math.min(3, Math.abs(delta) / 100);            // 휠 한 칸(≈100) 기준 배수
+  const R = state.bounds?.radius || 1; const minGap = Math.max(R * 0.002, 1e-4);
+  let move;
+  if (delta < 0) { const remaining = tHit - minGap; if (remaining <= 0) return; move = remaining * (1 - Math.pow(0.88, k)); } // 남은 거리의 12 %씩 접근 → 표면을 절대 통과하지 않음
+  else move = -tHit * (Math.pow(1 / 0.88, k) - 1);          // 멀어질 때는 비례해서 후퇴
+  const hitPoint = hit ? hit.point.clone() : o.clone().addScaledVector(ray.d, tHit);
+  state.lastZoom = { tHit, tTarget, move, px, py, hit: !!hit };
+  camera.position.addScaledVector(dirMove, move);          // 표면 점을 향해 이동 → 그 점이 화면에서 고정
+  const depth = Math.max(minGap, hitPoint.sub(camera.position).dot(viewDir));
+  controls.target.copy(camera.position).addScaledVector(viewDir, depth); // 궤도 중심을 표면 깊이에 두어 회전이 그 점을 중심으로
+  controls.update();
 }
 function refPoint() {
   if (state.estimate) return state.estimate.p.clone();
@@ -304,6 +365,7 @@ async function loadFiles(fileList) {
   let pos = positionsFromPly(buf, header);
   if (!pos) { try { const src = mesh.splats || mesh.packedSplats; const n = src?.numSplats || 0; const step = Math.max(1, Math.floor(n / 150000)); const arr = []; src?.forEachSplat?.((i, c) => { if (i % step === 0) arr.push(c.x, c.y, c.z); }); if (arr.length) pos = arr; } catch (e) { console.warn('forEachSplat 실패', e); } }
   state.bounds = pos ? boundsFromPositions(pos) : { center: new THREE.Vector3(), radius: 5 };
+  state.centers = pos ? Float32Array.from(pos) : null; // 휠 줌의 표면 깊이 추정용 표본
   // 위 방향
   const upFromHeader = header?.upAxis ? { '+z': [0, 0, 1], '-z': [0, 0, -1], '+y': [0, 1, 0], '-y': [0, -1, 0], '+x': [1, 0, 0], '-x': [-1, 0, 0] }[header.upAxis] : null;
   if (upFromHeader) setUp(new THREE.Vector3(...upFromHeader), 'PLY 헤더(up axis)');

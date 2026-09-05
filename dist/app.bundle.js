@@ -56852,6 +56852,7 @@ void main() {
     header: null,
     mesh: null,
     bounds: null,
+    centers: null,
     unit: { known: false, factor: 1, sigmaRel: 0, source: "" },
     upSource: null,
     task: null,
@@ -56897,6 +56898,8 @@ void main() {
     controls.zoomToCursor = true;
     controls.screenSpacePanning = true;
     controls.rotateSpeed = 0.7;
+    controls.enableZoom = false;
+    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
     renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
     resize();
     window.addEventListener("resize", resize);
@@ -56921,10 +56924,21 @@ void main() {
   function viewSize() {
     return { w: glHost.clientWidth, h: glHost.clientHeight };
   }
+  function updateClipPlanes() {
+    const d = Math.max(1e-4, controls.target.distanceTo(camera.position));
+    const R = state.bounds?.radius || 10;
+    const near = MathUtils.clamp(d * 0.02, 1e-4, R * 0.01);
+    if (Math.abs(camera.near - near) / near > 0.15) {
+      camera.near = near;
+      camera.far = Math.max(R * 300, near * 1e6);
+      camera.updateProjectionMatrix();
+    }
+  }
   function loop() {
     requestAnimationFrame(loop);
     tickAnimations();
     controls.update();
+    if (state.bounds) updateClipPlanes();
     if (state.mesh) renderer.render(scene, camera);
     drawOverlay();
     updateLoupe();
@@ -56964,14 +56978,18 @@ void main() {
     const dir = h.multiplyScalar(Math.cos(az)).add(h2.multiplyScalar(Math.sin(az))).multiplyScalar(Math.cos(el)).add(up.clone().multiplyScalar(Math.sin(el)));
     camera.position.copy(center).add(dir.multiplyScalar(radius * 2.2));
     controls.target.copy(center);
-    camera.near = Math.max(1e-4, radius * 1e-3);
-    camera.far = radius * 200;
+    camera.near = Math.max(1e-4, radius * 0.02);
+    camera.far = radius * 300;
     camera.updateProjectionMatrix();
     controls.update();
   }
   function setUp(v, source) {
     camera.up.copy(v).normalize();
     state.upSource = source;
+    if (controls._quat) {
+      controls._quat.setFromUnitVectors(camera.up, new Vector3(0, 1, 0));
+      controls._quatInverse.copy(controls._quat).invert();
+    }
     const names = { "0,-1,0": "\u2212Y", "0,1,0": "+Y", "0,0,1": "+Z", "0,0,-1": "\u2212Z", "1,0,0": "+X", "-1,0,0": "\u2212X" };
     $("#up-label").textContent = names[[v.x, v.y, v.z].join(",")] || "\uC0AC\uC6A9\uC790";
     if (state.bounds) frameAll();
@@ -56995,6 +57013,78 @@ void main() {
       camera.position.copy(center).add(new Vector3().setFromSpherical(s).applyQuaternion(qi));
       controls.target.lerpVectors(tFrom, center, e);
     });
+  }
+  function surfaceHitAlongRay(o, d, pxRadius = 10) {
+    const C = state.centers;
+    if (!C) return null;
+    const f = focalPx();
+    const tanA = pxRadius / f;
+    const hits = [];
+    for (let i = 0; i < C.length; i += 3) {
+      const vx = C[i] - o.x, vy = C[i + 1] - o.y, vz = C[i + 2] - o.z;
+      const t = vx * d.x + vy * d.y + vz * d.z;
+      if (t <= 1e-6) continue;
+      const perp2 = vx * vx + vy * vy + vz * vz - t * t;
+      const lim = t * tanA;
+      if (perp2 < lim * lim) hits.push({ t, i });
+    }
+    if (hits.length < 3) return pxRadius < 30 ? surfaceHitAlongRay(o, d, pxRadius * 2.5) : null;
+    hits.sort((a, b) => a.t - b.t);
+    const K = Math.max(3, Math.floor(hits.length * 0.03));
+    let s0 = -1;
+    for (let a = 0; a + K - 1 < hits.length; a++) {
+      if (hits[a + K - 1].t <= hits[a].t * 1.12) {
+        s0 = a;
+        break;
+      }
+    }
+    if (s0 < 0) s0 = Math.max(0, Math.floor(hits.length * 0.15) - Math.floor(K / 2));
+    const pt = new Vector3();
+    let n = 0;
+    for (let a = s0; a < Math.min(hits.length, s0 + K); a++) {
+      const k = hits[a].i;
+      pt.x += C[k];
+      pt.y += C[k + 1];
+      pt.z += C[k + 2];
+      n++;
+    }
+    pt.divideScalar(n);
+    return { t: pt.distanceTo(o), point: pt };
+  }
+  function onWheel(e) {
+    if (!state.mesh) return;
+    e.preventDefault();
+    const r = renderer.domElement.getBoundingClientRect();
+    const px2 = e.clientX - r.left, py2 = e.clientY - r.top;
+    const ray = rayFromPixel(px2, py2);
+    const o = camera.position.clone();
+    const viewDir = camera.getWorldDirection(new Vector3());
+    const tTarget = Math.max(1e-3, controls.target.clone().sub(o).dot(viewDir));
+    let hit = surfaceHitAlongRay(o, ray.d);
+    const zm = state.zoomMouse;
+    const mouseMoved = !zm || Math.hypot(px2 - zm.x, py2 - zm.y) > 3;
+    state.zoomMouse = { x: px2, y: py2 };
+    if (hit && !mouseMoved && state.lastZoom && hit.t > 1.5 * tTarget) hit = null;
+    const dirMove = hit ? hit.point.clone().sub(o).normalize() : ray.d.clone();
+    const tHit = hit ? hit.t : tTarget;
+    let delta = e.deltaY;
+    if (e.deltaMode === 1) delta *= 16;
+    else if (e.deltaMode === 2) delta *= 400;
+    const k = Math.min(3, Math.abs(delta) / 100);
+    const R = state.bounds?.radius || 1;
+    const minGap = Math.max(R * 2e-3, 1e-4);
+    let move;
+    if (delta < 0) {
+      const remaining = tHit - minGap;
+      if (remaining <= 0) return;
+      move = remaining * (1 - Math.pow(0.88, k));
+    } else move = -tHit * (Math.pow(1 / 0.88, k) - 1);
+    const hitPoint = hit ? hit.point.clone() : o.clone().addScaledVector(ray.d, tHit);
+    state.lastZoom = { tHit, tTarget, move, px: px2, py: py2, hit: !!hit };
+    camera.position.addScaledVector(dirMove, move);
+    const depth = Math.max(minGap, hitPoint.sub(camera.position).dot(viewDir));
+    controls.target.copy(camera.position).addScaledVector(viewDir, depth);
+    controls.update();
   }
   function refPoint() {
     if (state.estimate) return state.estimate.p.clone();
@@ -57317,6 +57407,7 @@ void main() {
       }
     }
     state.bounds = pos ? boundsFromPositions(pos) : { center: new Vector3(), radius: 5 };
+    state.centers = pos ? Float32Array.from(pos) : null;
     const upFromHeader = header?.upAxis ? { "+z": [0, 0, 1], "-z": [0, 0, -1], "+y": [0, 1, 0], "-y": [0, -1, 0], "+x": [1, 0, 0], "-x": [-1, 0, 0] }[header.upAxis] : null;
     if (upFromHeader) setUp(new Vector3(...upFromHeader), "PLY \uD5E4\uB354(up axis)");
     else {
