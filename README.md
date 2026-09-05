@@ -8,13 +8,15 @@ Stereoscopic-View Based Measurements* ([arXiv 2603.24716](https://arxiv.org/abs/
 핵심 흐름: COLMAP 임의 단위의 3DGS PLY → **미터·Z-up 으로 유사변환**(GPS 또는 GCP) → **3D Tiles 변환**
 → Cesium 기반 논문 도구에서 여러 시점 클릭으로 점 측정 → CSV 내보내기 → **거리 계산·축척 보정**.
 
-👉 단계별 안내는 **[3DGS_거리측정_튜토리얼.md](3DGS_거리측정_튜토리얼.md)** 를 보세요.
+👉 **처음이라면 [3DGS_거리측정_쉬운설명.md](3DGS_거리측정_쉬운설명.md)** (용어 설명 + 한 동작씩 따라하기 + FAQ) 부터,
+   옵션·수식·실행 로그가 필요하면 **[3DGS_거리측정_튜토리얼.md](3DGS_거리측정_튜토리얼.md)** (상세판) 을 보세요.
 
 ## 구성
 
 | 경로 | 내용 |
 |---|---|
-| `3DGS_거리측정_튜토리얼.md` | 전체 절차(0~10장 + 부록), 실제 실행 로그 포함 |
+| `3DGS_거리측정_쉬운설명.md` | **입문용.** 등장인물(Cesium·3D Tiles·Node 등) 설명, 한 동작씩 따라하기, 예상 화면, FAQ |
+| `3DGS_거리측정_튜토리얼.md` | 전체 절차(0~10장 + 부록), 실제 실행 로그 포함 | (상세판)
 | `tools/gs_ply_georef.py` | 3DGS PLY 유사변환. `info` / `from-gps`(COLMAP+드론 EXIF GPS 로 축척·회전 추정) / `apply`(GCP 값 직접 적용). 위치·log-scale·쿼터니언·**SH 계수 회전**까지 처리 |
 | `tools/measure_distance.py` | 도구의 Points/Polylines CSV·GeoJSON → WGS84 ECEF → 거리(m)와 불확도, `--calibrate` 로 축척계수 |
 | `tools/start_tool.sh` | 측정 도구(Vite 개발 서버) 실행 → http://localhost:5173 |
