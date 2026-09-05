@@ -1,0 +1,10 @@
+# 대용량 산출물 (재생성 가능) — 튜토리얼 2~3단계 참고
+data/**/*.ply
+# 논문 PDF 원문 폴더 (저작물, 저장소에 포함하지 않음)
+Accurate Point Measurement in 3DGS*/
+# 파이썬/편집기
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+# 3dgs_measurement_tool 은 git 서브모듈 (node_modules, public/models/site01 은 그 안에서 생성됨)

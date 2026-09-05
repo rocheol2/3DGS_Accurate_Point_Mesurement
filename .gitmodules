@@ -1,0 +1,3 @@
+[submodule "3dgs_measurement_tool"]
+	path = 3dgs_measurement_tool
+	url = https://github.com/GDAOSU/3dgs_measurement_tool.git

@@ -1,0 +1,44 @@
+{
+  "mode": "from-gps",
+  "input_ply": "/home/rocheol2/storage/03_Results/Vanilla_3DGS/Site_Research_01/point_cloud/iteration_30000/point_cloud.ply",
+  "images": "/home/rocheol2/storage/02_Processed/Site_Research_01/3dgs_source/sparse/0/images.bin",
+  "photos_dir": "/home/rocheol2/storage/01_Raw/Photos/01_LH",
+  "n_gps_used": 162,
+  "residual_rms_m": 0.3452953947003193,
+  "origin_lat": 35.177797160703896,
+  "origin_lon": 128.14690828592205,
+  "origin_note": "ENU 원점 = 사용 사진 GPS 평균 위치, U=0 = 평균 촬영고도",
+  "ground_u_m": -4.882409782409668,
+  "recommended_coordinate": [
+    35.17779716,
+    128.14690829,
+    5.9
+  ],
+  "converter_command": "3dgs-ply-3dtiles-converter \"/home/rocheol2/storage/Cesium/data/site01/site01_enu.ply\" <출력폴더> --coordinate \"[35.17779716,128.14690829,5.9]\" --no-open-inspector",
+  "output_ply": "/home/rocheol2/storage/Cesium/data/site01/site01_enu.ply",
+  "scale": 4.201500016364501,
+  "rotation": [
+    [
+      -0.5565895293023453,
+      -0.34136953308168483,
+      -0.7574133202912308
+    ],
+    [
+      0.8307342812445421,
+      -0.2183550311796242,
+      -0.5120562804259509
+    ],
+    [
+      0.00941540419249669,
+      -0.914214374335767,
+      0.4051214977284641
+    ]
+  ],
+  "translation": [
+    -0.8344160558086114,
+    -0.2379036581526639,
+    -0.04649232443938155
+  ],
+  "sh_rotated": true,
+  "ply_axes": "x=East, y=North, z=Up (meters)"
+}

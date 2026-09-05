@@ -1,0 +1,18 @@
+diff --git a/src/pages/Home.jsx b/src/pages/Home.jsx
+index 9339e38..ab5128c 100644
+--- a/src/pages/Home.jsx
++++ b/src/pages/Home.jsx
+@@ -12,6 +12,13 @@ import {
+ // Base models for demonstration.
+ // Base models are hosted locally within the repository's `public/models` directory.
+ const BASE_MODELS = [
++  {
++    // 내 모델: tools/gs_ply_georef.py → 3dgs-ply-3dtiles-converter 로 만든 3D Tiles (public/models/site01/)
++    id: "Site_Research_01",
++    name: "Site_Research_01 (LH drone, local)",
++    tilesetUrls: ["/models/site01/tileset.json"],
++    offsetHeight: 0,
++  },
+   {
+     id: "White Sculpture",
+     name: "White Sculpture (Local)",
