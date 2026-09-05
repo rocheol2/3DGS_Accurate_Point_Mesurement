@@ -6,6 +6,7 @@ import { ERRORS, QUALITY } from './errors.js';
 import { startTour, TOUR_STEPS } from './tour.js';
 
 const $ = (s) => document.querySelector(s);
+const FILE_MODE = location.protocol === 'file:'; // 더블클릭(단일 파일 버전)으로 열림: fetch 불가 → 샘플 숨김
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 const DEG = Math.PI / 180;
 
@@ -271,7 +272,7 @@ async function loadFiles(fileList) {
   const side = files.find((f) => /\.json$/i.test(f.name));
   if (!main) { showError('E02', `놓은 파일: ${files.map((f) => f.name).join(', ')}`); return; }
   const ext = main.name.toLowerCase().split('.').pop();
-  $('#loading').hidden = false; $('#loading-text').textContent = `파일을 읽는 중… (${main.name}, ${(main.size / 1e6).toFixed(1)} MB)`; $('#loading-sub').textContent = '';
+  $('#loading').hidden = false; $('#loading-text').textContent = `파일을 읽는 중… (${main.name}, ${(main.size / 1e6).toFixed(1)} MB)`; $('#loading-sub').textContent = main.size > 500e6 ? '큰 파일입니다. 1~3분 정도 걸릴 수 있으니 탭을 닫지 마세요.' : '';
   await new Promise((r) => setTimeout(r, 30));
   let buf; try { buf = await main.arrayBuffer(); } catch (e) { $('#loading').hidden = true; showError('E11', String(e)); return; }
   let header = null;
@@ -280,7 +281,7 @@ async function loadFiles(fileList) {
     if (!header) { $('#loading').hidden = true; showError('E02', 'PLY 헤더를 읽을 수 없습니다(손상 또는 텍스트 형식).'); return; }
     if (header.is2dgs) { $('#loading').hidden = true; showError('E04'); return; }
     if (!header.has3dgs) { $('#loading').hidden = true; showError('E03', `속성: ${header.names.slice(0, 8).join(', ')}${header.names.length > 8 ? ' …' : ''}`); return; }
-    if (header.count > 6e6) showError('E13', `가우시안 ${header.count.toLocaleString()}개`);
+    if (header.count > 3e6 || main.size > 700e6) showError('E13', `가우시안 ${header.count.toLocaleString()}개 · 파일 ${(main.size / 1e9).toFixed(2)} GB · 예상 메모리 약 ${(main.size * 2.5 / 1e9).toFixed(1)} GB. 읽는 데 수 분 걸릴 수 있고 실패할 수 있습니다.`);
     $('#loading-sub').textContent = `가우시안 ${header.count.toLocaleString()}개 · SH ${header.shDegree}차 · ${header.compressed ? '압축 PLY' : '3DGS PLY'} — GPU에 올리는 중`;
   }
   // 이전 모델 제거
@@ -624,6 +625,7 @@ function runTour() { document.getElementById('app').classList.add('tour-active')
 // ------------------------------------------------------------------ 시작
 if (initGL()) {
   coach('', '3DGS 파일을 열어 시작하세요. 처음이라면 <b>기능 소개 투어</b>를 눌러 보세요.');
+  if (FILE_MODE) { $('#btn-sample').hidden = true; $('#drop-sample').hidden = true; const n = document.createElement('p'); n.className = 'muted small'; n.textContent = '파일에서 직접 열린 단일 파일 버전입니다. 내 3DGS 파일을 끌어다 놓거나 [파일 선택]을 누르세요. (샘플 체험은 온라인 버전에서만 제공)'; $('.drop-actions').after(n); }
   let seen = false; try { seen = !!localStorage.getItem('gsm.tourSeen'); } catch (_) {}
   if (!seen && !location.hash.includes('notour')) setTimeout(runTour, 600);
 }

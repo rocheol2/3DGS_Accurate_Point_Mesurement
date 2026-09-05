@@ -1,0 +1,36 @@
+{
+  "mode": "apply",
+  "input_ply": "/home/rocheol2/storage/3DGS_DATA/experiments/DS003_20260731_dormitory_construction_drone/IS003_photos_with_gcp/CM002_opencv_sift_local/vanilla_3dgs/RUN001_defaults_30k/point_cloud/iteration_30000/point_cloud.ply",
+  "local_origin_subtracted": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "note": "실좌표 = PLY좌표 + local_origin_subtracted",
+  "output_ply": "/home/rocheol2/storage/Cesium/data/ds003/ds003_cm002_local_metric.ply",
+  "scale": 9.742857245006276,
+  "rotation": [
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "translation": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "sh_rotated": true,
+  "ply_axes": "x=East, y=North, z=Up (meters)"
+}
