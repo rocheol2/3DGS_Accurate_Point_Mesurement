@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3DGS 다시점 거리 측정기</title>
+<meta name="description" content="3D Gaussian Splatting 파일을 브라우저에서 열고, 같은 점을 여러 각도에서 클릭해 좌표와 거리를 재는 설치 없는 웹앱 (Deng & Qin 2026 다시점 공간교회 방법)">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23111827'/><path d='M6 22 L26 10 M8 8 L24 24 M16 4 L16 28' stroke='%23fbbf24' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%2322d3ee'/></svg>">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js",
+    "three/addons/postprocessing/Pass.js": "./vendor/Pass.js",
+    "@sparkjsdev/spark": "./vendor/spark.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <!-- 3D 렌더링 캔버스: app.js 가 #gl 에 생성 -->
+  <div id="gl"></div>
+  <!-- 안내선·마커·라벨용 2D 오버레이 -->
+  <canvas id="overlay" aria-hidden="true"></canvas>
+  <!-- 확대창(루페) -->
+  <div id="loupe" hidden><canvas id="loupe-canvas" width="180" height="180"></canvas><div id="loupe-info"></div></div>
+
+  <!-- 상단 도구막대 -->
+  <header id="topbar">
+    <div class="brand" title="3DGS 다시점 거리 측정기"><span class="logo">◎</span><span class="name">3DGS 거리 측정기</span></div>
+    <div class="group">
+      <button id="btn-open" class="btn" title="3DGS 파일 열기 (.ply .spz .splat .ksplat .sog)">📂 파일 열기</button>
+      <button id="btn-sample" class="btn ghost" title="내장 샘플(진주 LH 현장, 15만 가우시안)을 불러옵니다">샘플</button>
+    </div>
+    <div class="group">
+      <button id="btn-point" class="btn primary" disabled title="점 하나를 여러 각도에서 클릭해 3D 좌표를 잽니다 (M)">● 점 측정 <kbd>M</kbd></button>
+      <button id="btn-dist" class="btn primary" disabled title="점 A, 점 B 를 차례로 재서 거리를 표시합니다 (D)">↔ 거리 측정 <kbd>D</kbd></button>
+    </div>
+    <div class="group">
+      <button id="btn-scale" class="btn" disabled title="실제 길이를 아는 구간으로 축척을 맞춥니다">📏 축척 보정</button>
+      <button id="btn-export" class="btn" disabled title="CSV / JSON / PNG 저장">⬇ 내보내기</button>
+    </div>
+    <div class="group">
+      <div class="dropdown">
+        <button id="btn-up" class="btn" disabled title="어느 축이 하늘 방향인지 (화면이 뒤집혀 보이면 바꾸세요)">⤒ 위 방향: <span id="up-label">−Y</span></button>
+        <div class="menu" id="menu-up">
+          <button data-up="0,-1,0">−Y (COLMAP 3DGS 기본)</button>
+          <button data-up="0,1,0">+Y (SPZ · 일반 3D)</button>
+          <button data-up="0,0,1">+Z (측량·ENU·gs_ply_georef 결과)</button>
+          <button data-up="0,0,-1">−Z</button>
+          <button data-up="1,0,0">+X</button>
+          <button data-up="-1,0,0">−X</button>
+        </div>
+      </div>
+      <button id="btn-home" class="btn" disabled title="모델 전체가 보이는 위치로 (H)">⌂ 홈 <kbd>H</kbd></button>
+    </div>
+    <div class="group right">
+      <button id="btn-check" class="btn" title="파일·축척·측정 정보가 충분한지 점검"><span id="check-dot" class="dot"></span> 정보 점검</button>
+      <button id="btn-help" class="btn" title="기능 소개 투어 · 사용법">? 도움말</button>
+    </div>
+  </header>
+
+  <!-- 축척 경고 배너 -->
+  <div id="banner" hidden>
+    <span id="banner-text"></span>
+    <span class="banner-actions">
+      <button id="banner-calib" class="btn small primary">축척 보정 시작</button>
+      <button id="banner-manual" class="btn small">축척 직접 입력</button>
+      <button id="banner-dismiss" class="btn small ghost">모델 단위로 계속</button>
+    </span>
+  </div>
+
+  <!-- 오른쪽 패널 -->
+  <aside id="side">
+    <nav class="tabs">
+      <button class="tab active" data-tab="measure">측정</button>
+      <button class="tab" data-tab="results">결과 <span id="results-count" class="count">0</span></button>
+      <button class="tab" data-tab="settings">설정</button>
+    </nav>
+
+    <section class="tabpane active" data-pane="measure">
+      <div id="measure-idle">
+        <p class="hint">위의 <b>● 점 측정</b> 또는 <b>↔ 거리 측정</b>을 누르고, 3D 화면에서 잴 점을 <b>확대</b>해 클릭하세요.</p>
+        <ol class="howto">
+          <li>잴 점을 <b>크게 확대</b>해서 클릭 → 노란 광선 1개</li>
+          <li><b>왼쪽 드래그</b> 또는 <b>[자동 회전]</b>으로 20° 이상 돌리기</li>
+          <li><b>안내선(노란 선)</b> 위에서 같은 점을 다시 클릭</li>
+          <li>5번 채우면 자동 확정 · σ(오차)가 초록이면 성공</li>
+        </ol>
+      </div>
+      <div id="measure-live" hidden>
+        <div class="task-title" id="task-title">점 측정</div>
+        <div class="progress"><div id="progress-bar"></div></div>
+        <div class="rowline"><span>광선 <b id="ray-count">0</b> / <span id="ray-target">5</span></span><span>최대 각도 <b id="ray-angle">–</b></span></div>
+        <div class="anglemeter"><div id="angle-fill"></div><span id="angle-text">카메라를 20° 이상 돌리세요</span></div>
+        <div class="estimate" id="estimate-box" hidden>
+          <div class="rowline"><span>현재 추정점</span><span id="est-quality" class="badge">–</span></div>
+          <div class="mono" id="est-coords"></div>
+          <div class="rowline small"><span>σ₀(광선 잔차)</span><b id="est-sigma">–</b></div>
+        </div>
+        <table class="rays" id="ray-table"><thead><tr><th>#</th><th>잔차(px)</th><th>보정</th><th></th></tr></thead><tbody></tbody></table>
+        <div class="btnrow">
+          <button id="btn-autorot" class="btn small" title="현재 점을 중심으로 카메라를 35° 돌립니다 (R)">↻ 자동 회전 <kbd>R</kbd></button>
+          <button id="btn-undo" class="btn small" title="마지막 클릭 취소 (Backspace)">↶ 마지막 취소</button>
+          <button id="btn-worst" class="btn small" title="가장 어긋난 광선 제거">✂ 최악 광선 제거</button>
+        </div>
+        <div class="btnrow">
+          <button id="btn-finish" class="btn small primary" title="지금까지의 광선으로 점 확정 (Enter)">✔ 점 확정 <kbd>Enter</kbd></button>
+          <button id="btn-cancel" class="btn small ghost" title="이 점 측정 취소 (Esc)">✖ 취소 <kbd>Esc</kbd></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="tabpane" data-pane="results">
+      <div class="unitline">단위: <b id="unit-label">모델 단위(u)</b> <span id="unit-source" class="muted"></span></div>
+      <h4>점 <span class="muted">(체크 2개 → 거리)</span></h4>
+      <table class="pts" id="pt-table"><thead><tr><th></th><th>이름</th><th>좌표</th><th>σ</th><th>N</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="btnrow"><button id="btn-dist-sel" class="btn small" disabled>선택 두 점 거리</button><button id="btn-clear" class="btn small ghost">전체 지우기</button></div>
+      <h4>거리</h4>
+      <table class="dists" id="dist-table"><thead><tr><th>A–B</th><th>거리</th><th>±</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section class="tabpane" data-pane="settings">
+      <label class="field">점당 광선 수(자동 확정) <input id="set-n" type="number" min="2" max="12" value="5"></label>
+      <label class="field check"><input id="set-snap" type="checkbox" checked> 2번째 클릭을 안내선에 스냅</label>
+      <label class="field check"><input id="set-refine" type="checkbox" checked> 자동 정밀 보정(템플릿 매칭)</label>
+      <label class="field check"><input id="set-loupe" type="checkbox" checked> 확대창 표시</label>
+      <label class="field">확대창 배율 <input id="set-zoom" type="range" min="2" max="8" step="1" value="4"> <span id="zoom-label">4×</span></label>
+      <label class="field">거리 표시 단위 <select id="set-dunit"><option value="auto">자동 (m / cm)</option><option value="m">m</option><option value="cm">cm</option><option value="mm">mm</option></select></label>
+      <label class="field check"><input id="set-labels" type="checkbox" checked> 화면에 점·거리 라벨 표시</label>
+      <div class="btnrow"><button id="btn-scale-manual" class="btn small">축척 직접 입력</button><button id="btn-tour" class="btn small ghost">기능 소개 투어 다시 보기</button></div>
+      <p class="muted small">마우스: 왼쪽 드래그 회전 · 휠 확대(커서 방향) · 오른쪽 드래그 이동. 키: M 점, D 거리, R 자동회전, Enter 확정, Esc 취소, Backspace 마지막 취소, F 추정점에 초점, H 홈.</p>
+    </section>
+  </aside>
+
+  <!-- 하단 코치 바 -->
+  <footer id="coach"><span id="coach-step" class="step"></span><span id="coach-text">3DGS 파일을 열어 시작하세요.</span><span id="coach-right" class="muted"></span></footer>
+
+  <!-- 시작 화면 / 드롭존 -->
+  <div id="dropzone">
+    <div class="drop-card">
+      <h1>3DGS 다시점 거리 측정기</h1>
+      <p class="lead">3D Gaussian Splatting 파일을 <b>여기에 끌어다 놓으세요</b><br><span class="muted">.ply (3DGS · SuperSplat 압축) · .spz · .splat · .ksplat · .sog — 파일은 컴퓨터 밖으로 나가지 않습니다</span></p>
+      <div class="drop-actions">
+        <button id="drop-open" class="btn primary big">📂 파일 선택</button>
+        <button id="drop-sample" class="btn big">▶ 샘플로 체험 (진주 LH 현장)</button>
+        <button id="drop-tour" class="btn ghost big">기능 소개 투어</button>
+      </div>
+      <div class="feature-cards">
+        <div class="card"><div class="ic">①</div><b>파일 놓기</b><span>설치·변환·계정 없이 브라우저에서 바로 열립니다.</span></div>
+        <div class="card"><div class="ic">②</div><b>같은 점을 5번 클릭</b><span>각도를 바꿔 클릭하면 광선들이 만나는 3D 점을 최소제곱으로 계산합니다. 안내선과 확대창이 도와줍니다.</span></div>
+        <div class="card"><div class="ic">③</div><b>거리 즉시 표시</b><span>두 점을 재면 화면에 거리와 ±오차가 뜹니다. 축척이 없으면 <b>없다고 정확히 알려 주고</b> 보정 방법을 안내합니다.</span></div>
+      </div>
+      <p class="muted small">방법: Deng &amp; Qin (2026) "Accurate Point Measurement in 3DGS" 의 다시점 공간교회(spatial intersection). 렌더링: Spark + three.js (MIT). <a href="help.html" target="_blank">전체 사용법 열기</a></p>
+    </div>
+    <input id="file-input" type="file" multiple accept=".ply,.spz,.splat,.ksplat,.sog,.zip,.json" hidden>
+  </div>
+
+  <!-- 로딩 -->
+  <div id="loading" hidden><div class="spinner"></div><div id="loading-text">파일을 읽는 중…</div><div id="loading-sub" class="muted small"></div></div>
+
+  <!-- 토스트 -->
+  <div id="toasts"></div>
+
+  <!-- 모달(점검표 · 축척 · 내보내기 · 환영) -->
+  <div id="modal" hidden><div class="modal-card" role="dialog" aria-modal="true"><button class="modal-close" id="modal-close" title="닫기">✕</button><div id="modal-body"></div></div></div>
+
+  <!-- 투어 -->
+  <div id="tour-root"></div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
