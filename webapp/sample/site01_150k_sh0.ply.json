@@ -1,0 +1,9 @@
+{
+  "units": "m",
+  "scale_to_meters": 1.0,
+  "scale_sigma_rel": 0.02,
+  "note": "샘플: 진주 LH 현장(Site_Research_01) Vanilla 3DGS 를 gs_ply_georef.py from-gps 로 미터·Z-up 변환(축척 4.2015 m/단위, 드론 GPS 162장 적합, 잔차 RMS 0.35 m → 축척 상대 불확도 약 2 %) 후 15만 가우시안·SH0 으로 축소한 것",
+  "source_file": "site01_enu.ply",
+  "up_axis": "+z",
+  "generated_by": "3DGS 다시점 거리 측정기 저장소 (rocheol2/3DGS_Accurate_Point_Mesurement)"
+}

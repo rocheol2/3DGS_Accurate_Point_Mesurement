@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>사용법 — 3DGS 다시점 거리 측정기</title>
+<style>
+:root{--bg:#0b1020;--panel:#111a2e;--line:#26314d;--text:#e6ecf8;--muted:#94a3b8;--accent:#22d3ee;--accent2:#fbbf24;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif}
+body{margin:0;background:var(--bg);color:var(--text);line-height:1.6}
+main{max-width:920px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:28px;margin:0 0 6px}h2{font-size:20px;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line)}h3{font-size:16px;margin:18px 0 6px}
+.lead{color:var(--muted);font-size:15px}
+a{color:var(--accent)}code,kbd{font-family:ui-monospace,Menlo,Consolas,monospace;background:#ffffff12;padding:1px 5px;border-radius:4px;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:600}
+.step{display:grid;grid-template-columns:44px 1fr;gap:12px;margin:12px 0;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.step .n{width:36px;height:36px;border-radius:50%;background:var(--accent2);color:#000;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:16px}
+.step b{display:block;margin-bottom:2px}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:700;color:#000}
+.block{background:#ef4444;color:#fff}.warn{background:#f59e0b}.info{background:#22d3ee}
+.note{background:#1e293b;border-left:4px solid var(--accent2);padding:10px 12px;border-radius:6px;margin:10px 0;font-size:14px}
+.toc{columns:2;font-size:14px}.toc a{display:block;padding:2px 0}
+.btn{display:inline-block;background:#3b82f6;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600}
+@media (max-width:700px){.toc{columns:1}}
+</style>
+</head>
+<body><main>
+<h1>3DGS 다시점 거리 측정기 — 사용법</h1>
+<p class="lead">3D Gaussian Splatting(3DGS) 파일을 브라우저에서 열고, <b>같은 점을 여러 각도에서 클릭</b>해 3D 좌표와 두 점 사이 거리를 재는 도구입니다. 설치·변환·계정이 필요 없고 파일은 컴퓨터 밖으로 나가지 않습니다. 방법은 Deng &amp; Qin (2026) <i>Accurate Point Measurement in 3DGS</i> 의 다시점 공간교회(spatial intersection)입니다.</p>
+<p><a class="btn" href="index.html">← 측정기로 돌아가기</a> &nbsp; <a href="index.html#tour" onclick="localStorage.removeItem('gsm.tourSeen')">기능 소개 투어 다시 보기</a></p>
+<div class="toc">
+<a href="#idea">1. 어떻게 재는 건가요?</a><a href="#formats">2. 열 수 있는 파일</a><a href="#steps">3. 따라하기 (점 → 거리)</a><a href="#guide">4. 안내선·확대창·자동 보정</a><a href="#scale">5. 축척(미터) — 없으면 없다고 알려 드립니다</a><a href="#quality">6. 결과 읽는 법 (σ, 품질)</a><a href="#export">7. 내보내기</a><a href="#controls">8. 마우스·키보드</a><a href="#errors">9. 오류·경고 메시지 전체 목록</a><a href="#faq">10. 자주 묻는 질문</a><a href="#host">11. 내 컴퓨터/서버에서 열기</a>
+</div>
+
+<h2 id="idea">1. 어떻게 재는 건가요?</h2>
+<p>한 자리에서 화면의 점을 한 번 클릭하면 "카메라에서 그 방향으로 뻗는 직선(광선)" 하나만 알 수 있고, 그 점이 직선 위 어디(깊이)에 있는지는 모릅니다. 그래서 <b>카메라를 돌려 다른 각도에서 같은 점을 다시 클릭</b>합니다. 광선이 2개 이상 모이면 서로 만나는 곳이 정해지고, 5개쯤 모으면 잘못 클릭한 것이 있어도 티가 나고 평균이 잡힙니다. 앱은 모든 광선에 가장 가까운 점을 <b>최소제곱</b>으로 계산하고(논문 식 3~8), 광선들이 그 점에서 얼마나 어긋났는지를 <b>σ₀</b>로 보여 줍니다.</p>
+<p>이 방식은 모델 표면이 울퉁불퉁하거나 구멍이 나 있어도 상관없습니다. <b>눈에 보이기만 하면</b> 잴 수 있습니다. 대신 정확도는 <b>당신이 얼마나 같은 점을 정확히 클릭했는가</b>에 달려 있으므로, 앱은 확대창·안내선·자동 정밀 보정으로 클릭을 돕습니다.</p>
+
+<h2 id="formats">2. 열 수 있는 파일</h2>
+<table><tr><th>형식</th><th>설명</th><th>축척(미터) 정보</th></tr>
+<tr><td><code>.ply</code> (3DGS 원본)</td><td>gaussian-splatting 학습 결과 <code>point_cloud/iteration_30000/point_cloud.ply</code>. SuperSplat 압축 PLY도 됩니다.</td><td>보통 없음(COLMAP 임의 단위). 헤더에 <code>units: meters</code> 주석이 있으면 인식</td></tr>
+<tr><td><code>.spz</code></td><td>Niantic 압축 형식. Scaniverse 등</td><td>없음(폰 LiDAR 앱 결과는 대체로 실제 미터이지만 파일에 표시되지 않으므로 "미확인"으로 표시됩니다 → 축척 직접 입력 1.0 또는 보정)</td></tr>
+<tr><td><code>.splat</code> / <code>.ksplat</code></td><td>antimatter15 / GaussianSplats3D 형식</td><td>없음</td></tr>
+<tr><td><code>.sog</code> / <code>.zip</code></td><td>PlayCanvas SOG 번들</td><td>없음</td></tr>
+<tr><td><code>.json</code> (사이드카)</td><td>위 파일과 <b>함께</b> 끌어다 놓으면 축척 정보로 읽습니다: <code>{"units":"m"}</code> 또는 <code>{"scale_to_meters":4.2015}</code>, 또는 <code>gs_ply_georef.py</code> 가 만든 메타 JSON</td><td>—</td></tr></table>
+<div class="note">❌ <code>input.ply</code>, <code>points3D.ply</code>(일반 점군), 2DGS 원본 PLY(<code>scale_2</code> 없음), 메시(.obj/.glb), 사진은 열 수 없습니다. 이유와 대안은 <a href="#errors">오류 목록</a> E03·E04.</div>
+
+<h2 id="steps">3. 따라하기 (점 → 거리)</h2>
+<div class="step"><div class="n">1</div><div><b>파일 열기</b> 화면에 파일을 끌어다 놓거나 <b>[📂 파일 열기]</b>. 처음이면 <b>[샘플로 체험]</b>(진주 LH 현장, 15만 가우시안, 미터 단위)으로 연습하세요. 로드 후 3D 화면에 모델이 나타납니다. 뒤집혀 보이면 <b>[⤒ 위 방향]</b>에서 +Y/−Y/+Z를 바꿉니다.</div></div>
+<div class="step"><div class="n">2</div><div><b>잴 곳으로 다가가기</b> 휠을 굴리면 <b>커서가 가리키는 곳</b>으로 확대됩니다. 왼쪽 드래그로 회전, 오른콍 드래그로 이동. 잴 점이 화면에 크게 보이게 하세요.</div></div>
+<div class="step"><div class="n">3</div><div><b>[● 점 측정]</b>(또는 <kbd>M</kbd>) 을 누르고 점을 <b>정확히 한 번</b> 클릭합니다. 커서 옆 <b>확대창</b>이 픽셀 단위로 보여 줍니다. 클릭하면 노란 광선이 생기고, 화면이 그 점을 중심으로 살짝 정렬됩니다.</div></div>
+<div class="step"><div class="n">4</div><div><b>카메라를 20° 이상 돌리기</b> 왼쪽 드래그, 또는 <b>[↻ 자동 회전]</b>(<kbd>R</kbd>). 오른쪽 패널의 <b>각도 막대</b>가 초록이 되면 충분합니다. 화면에는 첫 광선이 <b>노란 점선(안내선)</b>으로 그려집니다. 같은 점은 반드시 이 선 위에 있습니다.</div></div>
+<div class="step"><div class="n">5</div><div><b>안내선 위에서 같은 점 클릭</b> 클릭이 선에서 30 px 안이면 자동으로 선 위로 붙고(스냅), 첫 클릭 주변 무늬와 비교해 위치를 살짝 다듬습니다(자동 정밀 보정). 2개째부터 <b>청록 원(현재 추정점)</b>이 표시되므로 다음 클릭은 그 근처에서 하면 됩니다.</div></div>
+<div class="step"><div class="n">6</div><div><b>5개 채우면 자동 확정</b> (설정에서 2~12개로 변경 가능, <kbd>Enter</kbd>로 조기 확정). 결과 탭에 <b>P1</b>이 좌표·σ·품질과 함께 추가됩니다. 품질이 빨강이면 <b>[✂ 최악 광선 제거]</b> 또는 <kbd>Esc</kbd> 후 다시.</div></div>
+<div class="step"><div class="n">7</div><div><b>거리</b> <b>[↔ 거리 측정]</b>(<kbd>D</kbd>) 을 누르면 A점, B점을 차례로 재고 화면과 결과 탭에 <b>거리 ± 오차</b>가 표시됩니다. 이미 잰 점 2개를 결과 탭에서 체크하고 <b>[선택 두 점 거리]</b>를 눌러도 됩니다.</div></div>
+
+<h2 id="guide">4. 안내선·확대창·자동 보정이 하는 일</h2>
+<table><tr><th>기능</th><th>무엇</th><th>왜 도움이 되나</th></tr>
+<tr><td>안내선(노란 점선)</td><td>첫 클릭의 광선을 현재 화면에 투영한 선</td><td>같은 점은 기하학적으로 이 선 위에 있어야 하므로, "어디를 클릭해야 하나" 고민이 1차원으로 줄어듭니다(사진측량의 에피폴라 선).</td></tr>
+<tr><td>스냅</td><td>2번째 클릭이 안내선에서 30 px 이내면 선 위로 이동</td><td>손떨림에 의한 선 밖 오차를 제거합니다. 설정에서 끌 수 있습니다.</td></tr>
+<tr><td>자동 정밀 보정</td><td>첫 클릭 주변 25×25 px 무늬를 기억하고, 이후 클릭 주변(안내선 방향 ±40 px)에서 가장 닮은 위치(정규화 상관 ≥ 0.55)로 이동</td><td>사람 눈보다 일관되게 "같은 무늬"를 찍습니다. 보정량과 유사도를 광선 표에 표시하며, 각도가 크게 달라져 무늬가 변하면 보정하지 않습니다.</td></tr>
+<tr><td>확대창(루페)</td><td>커서 주변을 2~8배 확대, 안내선·추정점·십자선 표시</td><td>서브픽셀 조준. <kbd>[</kbd> <kbd>]</kbd> 로 배율 변경.</td></tr>
+<tr><td>자동 회전</td><td>현재 추정점을 중심으로 35° 회전(+ 위아래 12° 교대)</td><td>각도를 충분히 벌린 시점을 클릭 한 번으로 만듭니다.</td></tr>
+<tr><td>각도 막대</td><td>첫 광선과 현재 시선 사이 각도</td><td>20° 미만이면 광선이 거의 평행해 깊이 오차가 커집니다.</td></tr></table>
+
+<h2 id="scale">5. 축척(미터) — 없으면 없다고 알려 드립니다</h2>
+<p>COLMAP으로 만든 3DGS는 크기 정보가 없습니다(축척 표시 없는 지도와 같음). 앱은 파일을 열 때 축척 정보를 찾고, <b>없으면 상단에 주황 배너(E05)</b>로 "미터 거리를 표시할 수 없다"는 사실과 이유, 해결 방법 세 가지를 보여 줍니다. 이때 거리는 <b>모델 단위(u)</b>로 표시되고 ⚠ 표시가 붙습니다. 앱이 없는 정보를 지어내는 일은 없습니다.</p>
+<h3>축척을 알려 주는 세 가지 방법</h3>
+<ol>
+<li><b>[📏 축척 보정]</b> — 실제 길이를 아는 구간(A4 긴 변 297 mm, 줌자로 잰 문 폭, 두 측량 기준점 거리 등)의 참값을 입력하고, 양 끝점을 보통처럼 잽니다. 앱이 <code>축척 = 참값 ÷ 측정값</code>을 계산해 적용하고 상대 불확도도 알려 줍니다. 결과는 이 파일(이름+크기)에 대해 브라우저에 저장되어 다음에 자동 적용됩니다. <b>[적용 + 사이드카 JSON 저장]</b>을 누르면 다른 컴퓨터에서도 쓸 수 있습니다.</li>
+<li><b>[축척 직접 입력]</b> — 1 모델 단위 = 몇 m 인지 이미 알면 숫자만 넣습니다(예: gs_ply_georef.py 가 출력한 4.2015, GCP 지오리퍼런싱의 Scale 9.7429).</li>
+<li><b>사이드카 JSON</b> — 파일과 함께 <code>{"units":"m"}</code> 또는 <code>{"scale_to_meters": 4.2015}</code> JSON을 끌어다 놓습니다. PLY 헤더에 <code>comment units: meters</code> 가 있으면 자동 인식합니다.</li></ol>
+<div class="note">축척 정확도 = 거리 정확도. 기준 길이는 <b>길고(수 m 이상), 양 끝이 뾰족하게 정의되는</b> 것이 좋습니다. 가능하면 방향이 다른 구간 2개로 확인하세요.</div>
+
+<h2 id="quality">6. 결과 읽는 법</h2>
+<table><tr><th>표시</th><th>뜻</th><th>기준</th></tr>
+<tr><td>σ₀ (시그마)</td><td>광선들이 계산된 점에서 평균 얼마나 벗어났나(단위: u 또는 m)</td><td>작을수록 좋음. 잘 조준하면 수 cm 이하</td></tr>
+<tr><td>잔차 RMS (px)</td><td>각 광선의 벗어남을 화면 픽셀로 환산</td><td>≤1.5 px 좋음, ≤4 px 보통, 초과 나쁨</td></tr>
+<tr><td>최대 각도</td><td>광선 중 가장 벌어진 두 광선의 각</td><td>≥20° 좋음, 10~20° 보통, &lt;10° 확정 차단(E08)</td></tr>
+<tr><td>품질 배지</td><td>위 두 기준의 종합: <span class="tag" style="background:#22c55e">좋음</span> <span class="tag warn">보통</span> <span class="tag block">나쁨</span></td><td>나쁨이면 다시 재세요</td></tr>
+<tr><td>거리 ±</td><td>두 점의 공분산을 거리 방향으로 투영한 표준편차(+ 축척 불확도)</td><td>대략적 1σ 불확도</td></tr></table>
+
+<h2 id="export">7. 내보내기</h2>
+<p><b>[⬇ 내보내기]</b> → <b>CSV</b>(점: 모델 단위 좌표·미터 좌표·σ·광선 수·품질 / 거리: u와 m, 축척 출처), <b>JSON</b>(공분산 행렬·모든 광선 포함, 재계산 가능), <b>PNG</b>(현재 화면 + 라벨). 축척이 없으면 미터 열은 비어 있고 출처 열에 "축척 정보 없음"이 기록됩니다.</p>
+
+<h2 id="controls">8. 마우스·키보드</h2>
+<table><tr><th>동작</th><th>입력</th></tr><tr><td>회전</td><td>왼쪽 드래그</td></tr><tr><td>확대/축소 (커서 방향)</td><td>휠</td></tr><tr><td>이동</td><td>오른쪽 드래그</td></tr><tr><td>광선 추가</td><td>측정 중 클릭 (드래그하면 클릭으로 치지 않음)</td></tr><tr><td>점 측정 / 거리 측정</td><td><kbd>M</kbd> / <kbd>D</kbd></td></tr><tr><td>자동 회전 35°</td><td><kbd>R</kbd></td></tr><tr><td>점 확정 / 취소</td><td><kbd>Enter</kbd> / <kbd>Esc</kbd></td></tr><tr><td>마지막 광선 취소</td><td><kbd>Backspace</kbd></td></tr><tr><td>추정점에 초점 / 홈</td><td><kbd>F</kbd> / <kbd>H</kbd></td></tr><tr><td>확대창 배율</td><td><kbd>[</kbd> <kbd>]</kbd></td></tr><tr><td>도움말</td><td><kbd>?</kbd></td></tr></table>
+
+<h2 id="errors">9. 오류·경고 메시지 전체 목록</h2>
+<p class="lead">앱이 보여 주는 메시지는 모두 아래 표에서 나옵니다. <span class="tag block">진행 불가</span>는 계속할 수 없음, <span class="tag warn">주의</span>는 계속할 수 있지만 결과에 제한이 있음, <span class="tag info">안내</span>는 참고 사항입니다.</p>
+<table id="err-table"><tr><th>코드</th><th>수준</th><th>메시지 / 왜 안 되나</th><th>해결</th></tr></table>
+
+<h2 id="faq">10. 자주 묻는 질문</h2>
+<h3>Cesium 이나 다른 프로그램을 설치해야 하나요?</h3><p>아닙니다. 이 앱은 웹페이지 하나입니다. 브라우저(Chrome 권장, WebGL2 필요)만 있으면 됩니다. 렌더링은 Spark(three.js) 라이브러리가 페이지 안에서 합니다.</p>
+<h3>파일이 서버로 올라가나요?</h3><p>아닙니다. 파일은 브라우저 메모리에서만 읽힙니다. 네트워크 요청은 페이지 자체와 샘플 다운로드 외에 없습니다.</p>
+<h3>왜 같은 점을 5번이나 클릭하나요?</h3><p>2번이면 계산은 되지만 둘이 어긋났을 때 누가 틀렸는지 모릅니다. 5번이면 하나가 튀어도 σ가 커져 바로 알 수 있고, 평균이 잡혀 더 정확합니다(논문 실험도 5회). 설정에서 바꿀 수 있습니다.</p>
+<h3>Offset·위 방향을 바꾸면 거리가 달라지나요?</h3><p>아닙니다. 위 방향은 화면을 돌리는 기준축일 뿐이며 좌표·거리 계산에 쓰이지 않습니다.</p>
+<h3>측정 결과 좌표는 어떤 좌표계인가요?</h3><p>파일(PLY) 자체의 좌표계입니다. 축척이 적용되면 그 좌표에 축척계수를 곱한 값이 미터 좌표입니다. 절대 위치(위경도·국가좌표)가 필요하면 파일을 먼저 지오리퍼런싱해야 합니다(예: gs_ply_georef.py).</p>
+<h3>큰 파일(수백 MB)도 되나요?</h3><p>데스크톱 Chrome에서 2~3백만 가우시안까지는 보통 됩니다. 느리면 가우시안 수를 줄인 파일을 쓰세요. 6백만 개 이상이면 경고(E13)가 뜹니다.</p>
+<h3>얼마나 정확한가요?</h3><p>논문에서는 잘 정의된 점에서 1~2 cm RMSE 였습니다. 이 앱의 합성 테스트(모서리 2.000 m 정육면체)에서 5시점 클릭의 3D 오차는 mm 수준이었습니다. 실제 정확도는 (클릭 정밀도) + (축척 정확도 × 거리)로 정해집니다.</p>
+
+<h2 id="host">11. 내 컴퓨터/서버에서 열기</h2>
+<p>이 앱은 정적 파일이므로 어떤 웹 서버에나 올릴 수 있습니다. <b>GitHub Pages</b>에 올리면 주소만 공유하면 됩니다. 로컬에서 열 때는 브라우저 보안 정책상 <code>file://</code> 로 직접 열면 동작하지 않으므로, 폴더에서 <code>python3 -m http.server 8000</code> 을 실행하고 <code>http://localhost:8000/webapp/</code> 으로 접속하세요.</p>
+<p class="lead" style="margin-top:30px">렌더링: <a href="https://sparkjs.dev">Spark</a> 2.1.0 + <a href="https://threejs.org">three.js</a> 0.180.0 (MIT). 방법: Deng, D., Qin, R. (2026). <i>Accurate Point Measurement in 3DGS – A New Alternative to Traditional Stereoscopic-View Based Measurements</i>. arXiv:2603.24716.</p>
+</main>
+<script type="module">
+import { ERRORS } from './errors.js';
+const t = document.getElementById('err-table');
+for (const [code, e] of Object.entries(ERRORS)) { const tr = document.createElement('tr'); tr.innerHTML = `<td><code>${code}</code></td><td><span class="tag ${e.level}">${{block:'진행 불가',warn:'주의',info:'안내'}[e.level]}</span></td><td><b>${e.title}</b><br><span style="color:#94a3b8">${e.why}</span></td><td>${e.fix}</td>`; t.appendChild(tr); }
+</script>
+</body></html>

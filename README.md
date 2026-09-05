@@ -5,6 +5,18 @@ Stereoscopic-View Based Measurements* ([arXiv 2603.24716](https://arxiv.org/abs/
 [공개 도구](https://github.com/GDAOSU/3dgs_measurement_tool)) 의 **다시점 광선 공간교회(spatial intersection)**
 방법을 직접 학습한 3D Gaussian Splatting 모델에 적용해 점·거리를 측정하기 위한 작업 저장소입니다.
 
+## 🌐 웹앱: 설치 없이 브라우저에서 바로 측정
+
+**[webapp/](webapp/)** — 3DGS 파일(.ply/.spz/.splat/.ksplat/.sog)을 끌어다 놓고, 같은 점을 여러 각도에서 클릭하면 좌표와 거리가 바로 표시되는 정적 웹앱. Cesium·3D Tiles·Node 서버 없이 동작하며 파일은 컴퓨터 밖으로 나가지 않습니다.
+- 안내선(에피폴라 선)·확대창·자동 정밀 보정·자동 회전으로 다시점 클릭을 돕고, 축척 등 **없는 정보는 무엇이 없어서 안 되는지** 정확히 알립니다(E01~E13).
+- 열기: GitHub Pages 를 켜면 `https://rocheol2.github.io/3DGS_Accurate_Point_Mesurement/` (Settings → Pages → main / root). 로컬: `python3 -m http.server 8000` → `http://localhost:8000/webapp/`
+- 문서: [웹앱_사용법.md](웹앱_사용법.md) · [웹앱_작업결과_보고서.md](웹앱_작업결과_보고서.md) · 앱 안 도움말 [webapp/help.html](webapp/help.html) · 첫 방문 시 기능 소개 투어 자동 실행
+- 검증: 합성 2.000 m 정육면체 5시점 클릭 → 3D 오차 2.5~3.6 mm, 거리 2.0019 ± 0.0036 m (헤드리스 Chrome 자동 테스트)
+
+![웹앱 스크린샷](webapp/docs/shots/03_distance.png)
+
+## 📐 원 논문 도구(Cesium) 재현 경로
+
 핵심 흐름: COLMAP 임의 단위의 3DGS PLY → **미터·Z-up 으로 유사변환**(GPS 또는 GCP) → **3D Tiles 변환**
 → Cesium 기반 논문 도구에서 여러 시점 클릭으로 점 측정 → CSV 내보내기 → **거리 계산·축척 보정**.
 
@@ -24,6 +36,9 @@ Stereoscopic-View Based Measurements* ([arXiv 2603.24716](https://arxiv.org/abs/
 | `patches/0001-register-Site_Research_01-model.patch` | 도구 `Home.jsx` 에 내 모델(`/models/site01/tileset.json`)을 기본 항목으로 추가하는 패치 |
 | `data/site01/site01_enu.ply.json` | Site_Research_01 변환 메타(축척 4.2015 m/단위, 회전, 원점 위경도, 권장 `--coordinate`) — PLY 본문(632 MB)은 용량 때문에 제외 |
 | `setup.sh` | 새 환경에서 서브모듈·패치·Node 22(conda)·npm install 을 한 번에 |
+| `webapp/` | **설치 없는 웹앱** (Spark + three.js, 정적) · `help.html` 사용 설명 · `sample/` 진주 현장 샘플 · `docs/shots/` 검증 스크린샷 |
+| `웹앱_사용법.md`, `웹앱_작업결과_보고서.md` | 웹앱 사용법·작업 보고서 |
+| `index.html`, `.nojekyll` | GitHub Pages 진입(webapp/ 으로 리다이렉트) |
 
 ## 빠른 시작
 
