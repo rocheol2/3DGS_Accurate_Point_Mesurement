@@ -12,6 +12,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const logs = []; page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`)); page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
   await page.goto(BASE, { waitUntil: 'networkidle0' });
   await page.waitForFunction(() => window.__app && window.__state, { timeout: 20000 });
+  await page.evaluate(() => { window.__state.settings.autoRotate = false; window.__state.settings.loupeHiRes = false; });
   const webgl2 = await page.evaluate(() => window.__state.webgl2); console.log('WebGL2:', webgl2);
   await page.screenshot({ path: path.join(OUT, '01_landing.png') });
   // --- 파일 로드 (cube_m.ply : 미터 헤더 있음)
