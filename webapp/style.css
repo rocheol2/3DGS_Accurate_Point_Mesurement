@@ -163,3 +163,7 @@ a{color:var(--accent)}
 .btn.tog.on{background:var(--good);color:#000;font-weight:700}
 .quick{background:var(--panel2);border-radius:8px;padding:6px 8px;align-items:center}
 .quick .seg{vertical-align:middle}
+
+.mini{padding:2px 4px;font-size:12px;max-width:150px}
+input.mini{width:54px}
+.quick select,.quick input{vertical-align:middle}
