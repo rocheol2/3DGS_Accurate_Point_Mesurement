@@ -18,8 +18,8 @@ const state = {
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
   rays: [], estimate: null, refPatch: null, autoRotCount: 0,
   points: [], dists: [], selected: new Set(), nextId: 1,
-  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 4, loupeSize: 'm', loupeHiRes: true, autoRotate: true, dunit: 'auto', labels: true },
-  autoPivot: null, autoAngleDeg: 0, loupeHiResFailed: false,
+  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 4, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, dunit: 'auto', labels: true },
+  autoPivot: null, autoAngleDeg: 0, autoTiltDeg: 0, loupeHiResFailed: false, gcpInputs: {},
   mouse: { x: 0, y: 0, inside: false },
   webgl2: true,
 };
@@ -115,23 +115,46 @@ function setUp(v, source) {
   $('#up-label').textContent = names[[v.x, v.y, v.z].join(',')] || '사용자';
   if (state.bounds) frameAll();
 }
-function autoStepDeg() { return 350 / Math.max(2, state.settings.n); }
-// 측정 중인 점(피벗)을 중심으로 카메라를 위(up)축 기준 dAzDeg 만큼 궤도 회전. 거리·고도는 유지, 피벗은 화면 중앙에 고정.
-function autoOrbit(dAzDeg) {
-  if (!state.task || !state.rays.length) return;
+function autoStepDeg() { return state.settings.rotStep > 0 ? state.settings.rotStep : 350 / Math.max(2, state.settings.n); }
+// 회전축: 'screen' = 지금 보는 화면 기준(세로축=좌우 회전, 가로축=상하 회전), 'world' = 파일의 위(up) 방향 기준
+function orbitAxis(kind) {
+  if (state.settings.rotAxis === 'world') {
+    const up = camera.up.clone().normalize(); if (kind === 'h') return up;
+    return new THREE.Vector3().crossVectors(camera.getWorldDirection(new THREE.Vector3()), up).normalize();
+  }
+  return (kind === 'h' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).applyQuaternion(camera.quaternion).normalize();
+}
+// 측정 중인 점(피벗)을 중심으로 카메라를 궤도 회전. kind 'h': +deg = 카메라가 오른쪽으로, 'v': +deg = 카메라가 위로. 거리 유지, 피벗은 화면 중앙 고정.
+function autoOrbit(deg, kind = 'h') {
+  if (!state.task || !state.rays.length || !deg) return;
   if (state.estimate) state.autoPivot = state.estimate.p.clone();
   const pivot = state.autoPivot || refPoint(); if (!pivot) return;
-  const up = camera.up.clone().normalize();
-  const off0 = camera.position.clone().sub(pivot); const q = new THREE.Quaternion();
-  const tFrom = controls.target.clone(); const pFrom = camera.position.clone();
+  const axis = orbitAxis(kind); const angle = (kind === 'v' ? -deg : deg) * DEG;
+  const off0 = camera.position.clone().sub(pivot);
+  if (kind === 'v') { // 극점(바로 위/아래) 넘어가지 않게
+    const up = camera.up.clone().normalize(); const off1 = off0.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(axis, angle));
+    const phi = Math.acos(THREE.MathUtils.clamp(off1.clone().normalize().dot(up), -1, 1)) / DEG;
+    if (phi < 6 || phi > 174) { toast('그 방향으로는 더 돌릴 수 없습니다(바로 위/아래).', 'warn', 2500); return; }
+  }
+  const tFrom = controls.target.clone(); const q = new THREE.Quaternion();
   animate(700, (e) => {
-    q.setFromAxisAngle(up, dAzDeg * DEG * e);
+    q.setFromAxisAngle(axis, angle * e);
     camera.position.copy(pivot).add(off0.clone().applyQuaternion(q));
     controls.target.lerpVectors(tFrom, pivot, Math.min(1, e * 2));
     camera.lookAt(controls.target);
-  }, () => { controls.target.copy(pivot); camera.lookAt(pivot); controls.update(); state.autoAngleDeg += dAzDeg; updateMeasureUI(); });
+  }, () => { controls.target.copy(pivot); camera.lookAt(pivot); controls.update(); if (kind === 'h') state.autoAngleDeg += deg; else state.autoTiltDeg += deg; updateMeasureUI(); });
 }
-function autoRotate() { autoOrbit(autoStepDeg()); }
+// 클릭 k(1..N-1) 뒤 이동할 목표 각도 (패턴별 절대각) → 현재 누적각과의 차이만큼 회전
+function nextAutoStep(k) {
+  const st = autoStepDeg(); const pat = state.settings.rotPattern;
+  const alt = (i) => (i % 2 === 1 ? 1 : -1) * Math.ceil(i / 2) * st;
+  if (pat === 'right') return { kind: 'h', deg: k * st - state.autoAngleDeg };
+  if (pat === 'left') return { kind: 'h', deg: -k * st - state.autoAngleDeg };
+  if (pat === 'alth') return { kind: 'h', deg: alt(k) - state.autoAngleDeg };
+  return { kind: 'v', deg: Math.max(-70, Math.min(70, alt(k))) - state.autoTiltDeg };
+}
+function nextAutoLabel(k) { const n = nextAutoStep(k); if (!n.deg) return ''; const arrow = n.kind === 'h' ? (n.deg > 0 ? '⟳ 오른쪽' : '⟲ 왼쪽') : (n.deg > 0 ? '⇑ 위' : '⇓ 아래'); return `${arrow} ${Math.abs(n.deg).toFixed(0)}°`; }
+function autoRotate() { const k = state.rays.length; const n = nextAutoStep(k); if (n.deg) autoOrbit(n.deg, n.kind); else autoOrbit(autoStepDeg(), 'h'); }
 // 커서 광선 주변(각도 원뿔) 가우시안 중심들로 '커서 아래 표면 점'을 추정. state.centers 는 로드 시 저장한 표본(최대 20만 점)
 // 반환: { t: 카메라로부터의 거리, point: 표면 점 군집의 3D 중심 } 또는 null
 function surfaceHitAlongRay(o, d, pxRadius = 10) {
@@ -266,7 +289,8 @@ function fmtLen(vModel, sigModel = null, dist = false) {
   const k = unit === 'm' ? 1 : unit === 'cm' ? 100 : 1000; const dec = unit === 'm' ? 3 : unit === 'cm' ? 1 : 0;
   return `${(m * k).toFixed(dec)}${s != null ? ` ± ${(s * k).toFixed(dec)}` : ''} ${unit}`;
 }
-function fmtCoord(p) { const f = state.unit.known ? state.unit.factor : 1; const u = state.unit.known ? 'm' : 'u'; return `(${(p.x * f).toFixed(3)}, ${(p.y * f).toFixed(3)}, ${(p.z * f).toFixed(3)}) ${u}`; }
+function toReal(p) { const T = state.unit.transform; if (!T) return null; const R = T.R, s = T.s; return new THREE.Vector3(s * (R[0] * p.x + R[1] * p.y + R[2] * p.z) + T.t[0], s * (R[3] * p.x + R[4] * p.y + R[5] * p.z) + T.t[1], s * (R[6] * p.x + R[7] * p.y + R[8] * p.z) + T.t[2]); }
+function fmtCoord(p) { const r = toReal(p); if (r) return `(${r.x.toFixed(3)}, ${r.y.toFixed(3)}, ${r.z.toFixed(3)}) m ${state.unit.crs ? '· ' + state.unit.crs : ''}`; const f = state.unit.known ? state.unit.factor : 1; const u = state.unit.known ? 'm' : 'u'; return `(${(p.x * f).toFixed(3)}, ${(p.y * f).toFixed(3)}, ${(p.z * f).toFixed(3)}) ${u}`; }
 
 // ------------------------------------------------------------------ 알림
 function showError(code, extra = '', opts = {}) {
@@ -387,11 +411,11 @@ function resolveUnits(header, sidecar) {
   const u = { known: false, factor: 1, sigmaRel: 0, source: '' };
   const saved = fileKey() && localStorage.getItem(fileKey());
   if (sidecar) {
-    if (typeof sidecar.scale_to_meters === 'number' && sidecar.scale_to_meters > 0) Object.assign(u, { known: true, factor: sidecar.scale_to_meters, sigmaRel: sidecar.scale_sigma_rel || 0, source: `사이드카 JSON (scale_to_meters=${sidecar.scale_to_meters})` });
+    if (typeof sidecar.scale_to_meters === 'number' && sidecar.scale_to_meters > 0) Object.assign(u, { known: true, factor: sidecar.scale_to_meters, sigmaRel: sidecar.scale_sigma_rel || 0, source: `사이드카 JSON (scale_to_meters=${sidecar.scale_to_meters}${sidecar.transform ? ', 실좌표 변환 포함' : ''})`, transform: sidecar.transform && sidecar.transform.R && sidecar.transform.t ? sidecar.transform : null, crs: sidecar.crs || '' });
     else if (/^m(eters?|etres?)?$/i.test(String(sidecar.units || '')) || /meters/i.test(String(sidecar.ply_axes || ''))) Object.assign(u, { known: true, factor: 1, sigmaRel: sidecar.residual_rms_m && sidecar.n_gps_used ? 0.02 : 0, source: sidecar.mode === 'from-gps' ? `사이드카 JSON (gs_ply_georef from-gps, 축척 ${Number(sidecar.scale).toFixed(4)} 적용됨)` : '사이드카 JSON (units: m)' });
     else showError('E12', `키: ${Object.keys(sidecar).slice(0, 6).join(', ')}`);
   }
-  if (!u.known && saved) { try { const s = JSON.parse(saved); Object.assign(u, { known: true, factor: s.factor, sigmaRel: s.sigmaRel || 0, source: `이전 축척 보정값 (저장됨, ${new Date(s.when).toLocaleDateString()})` }); } catch (_) {} }
+  if (!u.known && saved) { try { const s = JSON.parse(saved); Object.assign(u, { known: true, factor: s.factor, sigmaRel: s.sigmaRel || 0, source: `이전 보정값 (저장됨, ${new Date(s.when).toLocaleDateString()}${s.source ? ', ' + s.source : ''})`, transform: s.transform || null, crs: s.crs || '' }); } catch (_) {} }
   if (!u.known && header) {
     if (header.scaleToMeters) Object.assign(u, { known: true, factor: header.scaleToMeters, source: 'PLY 헤더 (scale_to_meters)' });
     else if (header.unitsMeters) Object.assign(u, { known: true, factor: 1, source: 'PLY 헤더 (units: meters)' });
@@ -447,11 +471,11 @@ function onMeasureClick(px, py) {
   state.rays.push(ray);
   recompute();
   const nRays = state.rays.length;
-  if (nRays === 1) { const hit = surfaceHitAlongRay(ray.o, ray.d); state.autoPivot = hit ? hit.point.clone() : refPoint(); state.autoAngleDeg = 0; }
+  if (nRays === 1) { const hit = surfaceHitAlongRay(ray.o, ray.d); state.autoPivot = hit ? hit.point.clone() : refPoint(); state.autoAngleDeg = 0; state.autoTiltDeg = 0; }
   else if (state.estimate) state.autoPivot = state.estimate.p.clone();
   updateMeasureUI();
   if (nRays >= state.settings.n) { finishPoint(); return; }
-  if (state.settings.autoRotate) autoOrbit(autoStepDeg());          // 클릭 → 다음 각도로 자동 회전 → 사용자는 같은 점만 다시 클릭
+  if (state.settings.autoRotate) { const nx = nextAutoStep(nRays); autoOrbit(nx.deg, nx.kind); } // 클릭 → 선택한 방향·각도로 자동 회전 → 사용자는 같은 점만 다시 클릭
   else if (nRays === 1) { const rp = state.autoPivot || refPoint(); if (rp) moveTarget(rp, 350); }
   else if (state.estimate) moveTarget(state.estimate.p, 350);
 }
@@ -586,7 +610,7 @@ function updateMeasureUI() {
   $('#btn-finish').disabled = n < 2; $('#btn-worst').disabled = n < 3; $('#btn-undo').disabled = n < 1; $('#btn-autorot').disabled = n < 1;
   const step = `${Math.min(n + 1, N)}/${N}`; const lab = taskLabel();
   if (n === 0) coach(step, `<b>${lab}</b> — 잴 점을 <b>휠로 크게 확대</b>한 뒤 정확히 클릭하세요. (확대창이 커서 옆에 뜹니다)`, '오른쪽 드래그: 이동 · 왼쪽 드래그: 회전');
-  else if (state.settings.autoRotate) coach(step, `<b>${lab}</b> — 카메라가 <b>${autoStepDeg().toFixed(0)}°</b> 돌아갔습니다. 화면 중앙 근처(노란 안내선·청록 원)의 <b>같은 점을 클릭</b>하세요. ${N - n}개 남음 · 가려져 보이면 <b>R</b>로 한 번 더 회전`, e ? `σ₀ ${fmtLen(e.sigma0)} · 최대각 ${e.maxAngleDeg.toFixed(0)}°` : `누적 회전 ${state.autoAngleDeg.toFixed(0)}°`);
+  else if (state.settings.autoRotate) coach(step, `<b>${lab}</b> — 카메라가 자동으로 돌아갔습니다. 화면 중앙 근처(노란 안내선·청록 원)의 <b>같은 점을 클릭</b>하세요. ${N - n}개 남음 · 다음 회전: <b>${nextAutoLabel(n + 1) || '없음(마지막)'}</b> · 방향 바꾸기: <b>← → ↑ ↓</b> 키`, e ? `σ₀ ${fmtLen(e.sigma0)} · 최대각 ${e.maxAngleDeg.toFixed(0)}°` : `누적 좌우 ${state.autoAngleDeg.toFixed(0)}° · 상하 ${state.autoTiltDeg.toFixed(0)}°`);
   else if (n === 1) coach(step, `<b>${lab}</b> — 카메라를 <b>20° 이상 돌린 뒤</b>(왼쪽 드래그 또는 <b>R</b>) 노란 <b>안내선 위</b>에서 같은 점을 클릭하세요.`, '');
   else coach(step, `<b>${lab}</b> — 또 다른 각도에서 같은 점(청록 원 근처)을 클릭하세요. ${N - n}개 남음 · 지금 확정: <b>Enter</b>`, e ? `σ₀ ${fmtLen(e.sigma0)} · 최대각 ${e.maxAngleDeg.toFixed(0)}°` : '');
 }
@@ -630,35 +654,119 @@ function openHelp() {
 }
 function openCalibWizard() {
   if (!state.mesh) return;
-  openModal(`<h2>축척 보정</h2><div class="wizard-steps"><span class="done"></span><span></span><span></span></div>
-  <p><b>1단계.</b> 실제 길이를 <b>정확히 아는 구간</b>을 정합니다. 예: A4 용지 긴 변 <b>297 mm</b>, 줌자로 잰 문 폭, 두 측량 기준점 사이 거리, 레이저 스캐너 자료에서 잰 길이. 길수록(수 m) 축척이 정확해집니다.</p>
+  const n = state.points.length;
+  openModal(`<h2>축척(실제 크기) 맞추기 — 방법 고르기</h2>
+  <p class="muted small">이 모델의 좌표는 "모델 단위(u)"입니다. 실제 크기를 알려면 아래 셋 중 하나가 필요합니다. 지금 상태: <b>${state.unit.known ? '축척 있음 (' + state.unit.source + ')' : '축척 없음'}</b> · 측정한 점 ${n}개</p>
+  <div class="feature-cards" style="grid-template-columns:1fr;text-align:left">
+    <div class="card"><b>① 길이 하나로</b><span>실제 길이를 아는 구간(줄자로 잰 문 폭, A4 긴 변 297 mm 등)의 <b>양 끝점을 이 앱에서 측정</b>하면 축척 = 참값 ÷ 측정값. 축척만 계산됩니다.</span><div class="btnrow"><button class="btn primary small" id="cal-m1">길이로 보정 시작</button></div></div>
+    <div class="card"><b>② 기준점(GCP) 좌표로</b><span>실제 좌표를 아는 지점(측량 기준점·GCP 표지 등)을 <b>2개 이상 이 앱에서 측정</b>한 뒤, 각 점의 실제 X·Y·Z 를 <b>단위를 골라</b> 입력합니다. 2점이면 축척, <b>3점 이상이면 축척 + 회전 + 이동</b>까지 구해 모든 좌표를 실제 좌표계(예: EPSG:5186 m)로 표시합니다. 국가좌표처럼 큰 숫자도 그대로 넣으면 됩니다.</span><div class="btnrow"><button class="btn primary small" id="cal-m2">기준점 좌표 입력${n < 2 ? ' (먼저 점 2개 이상 측정)' : ` (${n}개 점)`}</button></div></div>
+    <div class="card"><b>③ 축척 숫자를 이미 알 때</b><span>"모델 1 단위 = 실제 몇 m" 를 아는 경우(예: gs_ply_georef.py 출력 4.2015, GCP 지오리퍼런싱 Scale 9.7429). 숫자 하나만 입력합니다.</span><div class="btnrow"><button class="btn small" id="cal-m3">축척 직접 입력</button></div></div>
+  </div>`);
+  $('#cal-m1').onclick = openLengthCalib; $('#cal-m2').onclick = openGcpCalib; $('#cal-m3').onclick = openManualScale;
+}
+function openLengthCalib() {
+  openModal(`<h2>① 길이 하나로 보정</h2><div class="wizard-steps"><span class="done"></span><span></span><span></span></div>
+  <p><b>1단계.</b> 실제 길이를 <b>정확히 아는 구간</b>을 정하고 그 길이(참값)를 입력합니다. 예: A4 용지 긴 변 <b>297 mm</b>, 줄자로 잰 문 폭, 두 측량 기준점 사이 거리. 길수록(수 m) 축척이 정확해집니다.</p>
   <div class="form-row"><label>참값(실제 길이)</label><input id="cal-val" type="number" step="any" min="0" placeholder="예: 297"><select id="cal-unit"><option value="mm">mm</option><option value="cm">cm</option><option value="m" selected>m</option></select><input id="cal-desc" type="text" placeholder="설명(선택): 예) 1층 출입문 폭" style="flex:1;min-width:160px"></div>
-  <p class="muted small">2단계에서 그 구간의 <b>양 끝점</b>을 보통 점 측정과 똑같이(각 5회 클릭) 잽니다. 3단계에서 축척계수 = 참값 ÷ 측정값 을 계산해 적용합니다.</p>
-  <div class="btnrow"><button class="btn primary" id="cal-start">2단계: 양 끝점 측정 시작</button><button class="btn ghost" id="cal-manual">축척을 이미 알면 직접 입력</button></div>`);
-  $('#cal-start').onclick = () => { const v = parseFloat($('#cal-val').value); const u = $('#cal-unit').value; if (!(v > 0)) { showError('E10', '참값을 먼저 입력하세요.'); return; } const trueLen = v * (u === 'mm' ? 0.001 : u === 'cm' ? 0.01 : 1); closeModal(); startTask('calib', { trueLen, desc: $('#cal-desc').value }); toast(`<b>축척 보정 2단계</b> 참값 ${trueLen} m 구간의 <b>A점</b>을 재세요 (5회 클릭)`, 'info', 6000); };
-  $('#cal-manual').onclick = openManualScale;
+  <p class="muted small">2단계에서 그 구간의 <b>양 끝점</b>을 보통 점 측정과 똑같이(각 5회 클릭) 잽니다. 3단계에서 축척 = 참값 ÷ 측정값 을 계산해 적용합니다.</p>
+  <div class="btnrow"><button class="btn primary" id="cal-start">2단계: 양 끝점 측정 시작</button><button class="btn ghost" id="cal-back">← 다른 방법</button></div>`);
+  $('#cal-start').onclick = () => { const v = parseFloat($('#cal-val').value); const u = $('#cal-unit').value; if (!(v > 0)) { showError('E10', '참값을 먼저 입력하세요.'); return; } const trueLen = v * (u === 'mm' ? 0.001 : u === 'cm' ? 0.01 : 1); closeModal(); startTask('calib', { trueLen, desc: $('#cal-desc').value }); toast(`<b>길이 보정 2단계</b> 참값 ${trueLen} m 구간의 <b>A점</b>을 재세요 (5회 클릭)`, 'info', 6000); };
+  $('#cal-back').onclick = openCalibWizard;
+}
+// ---- 기준점(GCP) 좌표 → 유사변환 (Horn 1987 단위쿼터니언 최소제곱)
+function jacobiEigen4(A) { // 대칭 4x4 최대 고유벡터
+  const n = 4; const a = A.map((r) => r.slice()); const v = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  for (let sweep = 0; sweep < 60; sweep++) {
+    let off = 0; for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += a[p][q] * a[p][q]; if (off < 1e-24) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+      if (Math.abs(a[p][q]) < 1e-30) continue; const th = (a[q][q] - a[p][p]) / (2 * a[p][q]); const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)); const c = 1 / Math.sqrt(t * t + 1), s2 = t * c;
+      for (let k = 0; k < n; k++) { const akp = a[k][p], akq = a[k][q]; a[k][p] = c * akp - s2 * akq; a[k][q] = s2 * akp + c * akq; }
+      for (let k = 0; k < n; k++) { const apk = a[p][k], aqk = a[q][k]; a[p][k] = c * apk - s2 * aqk; a[q][k] = s2 * apk + c * aqk; }
+      for (let k = 0; k < n; k++) { const vkp = v[k][p], vkq = v[k][q]; v[k][p] = c * vkp - s2 * vkq; v[k][q] = s2 * vkp + c * vkq; }
+    }
+  }
+  let best = 0; for (let i = 1; i < n; i++) if (a[i][i] > a[best][best]) best = i;
+  return [v[0][best], v[1][best], v[2][best], v[3][best]];
+}
+function similarityFromPairs(P, Q) { // P: 모델 좌표(Vector3[]), Q: 실좌표 m (Vector3[]) → {s, R(9, row-major), t[3], residuals[], rms, mode}
+  const n = P.length; const pm = new THREE.Vector3(), qm = new THREE.Vector3(); P.forEach((p) => pm.add(p)); Q.forEach((q) => qm.add(q)); pm.divideScalar(n); qm.divideScalar(n);
+  const Pc = P.map((p) => p.clone().sub(pm)), Qc = Q.map((q) => q.clone().sub(qm));
+  let mode = 'similarity';
+  let ext = 0; Pc.forEach((p) => (ext = Math.max(ext, p.length()))); let area = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) area = Math.max(area, new THREE.Vector3().crossVectors(Pc[i], Pc[j]).length());
+  if (n < 3 || area < 1e-3 * ext * ext) mode = 'scale-only'; // 2점이거나 한 줄 위 → 회전 결정 불가
+  let s, R;
+  if (mode === 'scale-only') { let num = 0, den = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { num += Qc[i].distanceTo(Qc[j]); den += Pc[i].distanceTo(Pc[j]); } s = num / den; R = [1, 0, 0, 0, 1, 0, 0, 0, 1]; }
+  else {
+    const S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; for (let k = 0; k < n; k++) { const p = Pc[k], q = Qc[k]; const pa = [p.x, p.y, p.z], qa = [q.x, q.y, q.z]; for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) S[a][b] += pa[a] * qa[b]; }
+    const [[Sxx, Sxy, Sxz], [Syx, Syy, Syz], [Szx, Szy, Szz]] = S;
+    const N = [[Sxx + Syy + Szz, Syz - Szy, Szx - Sxz, Sxy - Syx], [Syz - Szy, Sxx - Syy - Szz, Sxy + Syx, Szx + Sxz], [Szx - Sxz, Sxy + Syx, -Sxx + Syy - Szz, Syz + Szy], [Sxy - Syx, Szx + Sxz, Syz + Szy, -Sxx - Syy + Szz]];
+    const [w, x, y, z] = jacobiEigen4(N); const q = new THREE.Quaternion(x, y, z, w).normalize(); const e = new THREE.Matrix4().makeRotationFromQuaternion(q).elements;
+    R = [e[0], e[4], e[8], e[1], e[5], e[9], e[2], e[6], e[10]];
+    let num = 0, den = 0; for (let k = 0; k < n; k++) { const p = Pc[k]; const rp = new THREE.Vector3(R[0] * p.x + R[1] * p.y + R[2] * p.z, R[3] * p.x + R[4] * p.y + R[5] * p.z, R[6] * p.x + R[7] * p.y + R[8] * p.z); num += Qc[k].dot(rp); den += p.lengthSq(); } s = num / den;
+  }
+  const rp = (p) => new THREE.Vector3(s * (R[0] * p.x + R[1] * p.y + R[2] * p.z), s * (R[3] * p.x + R[4] * p.y + R[5] * p.z), s * (R[6] * p.x + R[7] * p.y + R[8] * p.z));
+  const t = qm.clone().sub(rp(pm)); const tt = [t.x, t.y, t.z];
+  const residuals = P.map((p, k) => rp(p).add(t).distanceTo(Q[k])); const rms = Math.sqrt(residuals.reduce((a, r) => a + r * r, 0) / n);
+  return { s, R, t: tt, residuals, rms, mode, extent: ext };
+}
+function openGcpCalib() {
+  const pts = state.points;
+  if (pts.length < 2) { openModal(`<h2>② 기준점(GCP) 좌표로 보정</h2><p>먼저 실제 좌표를 아는 지점을 <b>2개 이상</b> 이 앱에서 측정하세요(각 5회 클릭). 예: GCP 표지 중심, 측량한 모서리. 측정한 점이 결과 탭에 쌓이면 이 화면에서 각 점의 실제 좌표를 입력합니다.</p><div class="btnrow"><button class="btn primary" id="gcp-go">점 측정 시작</button><button class="btn ghost" id="gcp-back">← 다른 방법</button></div>`); $('#gcp-go').onclick = () => { closeModal(); startTask('point'); }; $('#gcp-back').onclick = openCalibWizard; return; }
+  const g = state.gcpInputs; const rows = pts.map((p) => { const v = g[p.name] || {}; return `<tr><td><b>${p.name}</b><br><span class="muted small mono">${fmtCoord(p.p)}</span></td><td><input data-gcp="${p.name}" data-k="x" type="number" step="any" placeholder="X (동/E)" value="${v.x ?? ''}" style="width:118px"></td><td><input data-gcp="${p.name}" data-k="y" type="number" step="any" placeholder="Y (북/N)" value="${v.y ?? ''}" style="width:118px"></td><td><input data-gcp="${p.name}" data-k="z" type="number" step="any" placeholder="Z (높이)" value="${v.z ?? ''}" style="width:96px"></td></tr>`; }).join('');
+  openModal(`<h2>② 기준점(GCP) 좌표로 보정</h2>
+  <p class="small">측정한 점마다 <b>실제 좌표</b>를 입력하세요. 비워 둔 점은 계산에서 빠집니다. <b>단위</b>는 입력한 숫자의 단위입니다(측량 성과가 m 이면 m). 좌표계 이름은 표시용입니다.</p>
+  <div class="form-row"><label>입력 단위</label><select id="gcp-unit"><option value="m" selected>m</option><option value="cm">cm</option><option value="mm">mm</option></select><label>좌표계 이름(선택)</label><input id="gcp-crs" type="text" placeholder="예: EPSG:5186 (한국 중부원점)" value="${state.unit.crs || ''}" style="flex:1;min-width:180px"></div>
+  <table><thead><tr><th>측정한 점 (현재 표시 좌표)</th><th>실제 X</th><th>실제 Y</th><th>실제 Z</th></tr></thead><tbody>${rows}</tbody></table>
+  <p class="muted small">2점 → 축척만 (두 점 사이 실제 거리 ÷ 측정 거리). 3점 이상(한 줄 위가 아닌) → 축척 + 회전 + 이동을 최소제곱으로 구하고, 이후 모든 좌표를 실제 좌표계로 표시합니다. 점이 많을수록 정확하며 잔차(RMS)로 품질을 확인할 수 있습니다.</p>
+  <div class="btnrow"><button class="btn primary" id="gcp-calc">계산</button><button class="btn ghost" id="gcp-back">← 다른 방법</button></div><div id="gcp-result"></div>`);
+  $('#gcp-back').onclick = openCalibWizard;
+  const readInputs = () => $$('[data-gcp]').forEach((inp) => { const nm = inp.dataset.gcp; g[nm] = g[nm] || {}; g[nm][inp.dataset.k] = inp.value === '' ? undefined : +inp.value; });
+  $$('[data-gcp]').forEach((inp) => (inp.onchange = readInputs));
+  $('#gcp-calc').onclick = () => {
+    readInputs();
+    const f = { m: 1, cm: 0.01, mm: 0.001 }[$('#gcp-unit').value]; const crs = $('#gcp-crs').value.trim();
+    const used = pts.filter((p) => { const v = g[p.name]; return v && [v.x, v.y, v.z].every((q) => Number.isFinite(q)); });
+    if (used.length < 2) { showError('E10', `실제 좌표(X·Y·Z 모두)가 입력된 점이 ${used.length}개입니다. 2개 이상 필요합니다.`); return; }
+    const P = used.map((p) => p.p.clone()), Q = used.map((p) => new THREE.Vector3(g[p.name].x * f, g[p.name].y * f, g[p.name].z * f));
+    const r = similarityFromPairs(P, Q); if (!(r.s > 0) || !Number.isFinite(r.s)) { showError('E10', '같은 위치의 점이 있거나 좌표가 잘못되었습니다.'); return; }
+    const resRows = used.map((p, k) => `<tr><td>${p.name}</td><td class="num">${r.residuals[k].toFixed(3)} m</td></tr>`).join('');
+    $('#gcp-result').innerHTML = `<h3>결과 (${used.length}점, ${r.mode === 'similarity' ? '축척 + 회전 + 이동' : '축척만 — 점이 2개이거나 한 줄 위에 있음'})</h3>
+      <div class="kv"><span>축척</span><b class="bigval">1 u = ${r.s.toPrecision(6)} m</b><span>잔차 RMS</span><b>${r.rms.toFixed(3)} m</b>${r.mode === 'similarity' ? `<span>이동 t</span><b class="mono">(${r.t.map((v) => v.toFixed(3)).join(', ')})</b>` : ''}</div>
+      <table><thead><tr><th>점</th><th>잔차</th></tr></thead><tbody>${resRows}</tbody></table>
+      ${r.rms > 0.05 * Math.max(0.2, r.extent * r.s) ? '<p class="small" style="color:#f59e0b">⚠ 잔차가 큽니다. 좌표 입력 오류(X/Y 바뀜, 단위)나 점 측정 오류를 확인하세요.</p>' : ''}
+      <div class="btnrow"><button class="btn primary" id="gcp-apply">적용</button><button class="btn" id="gcp-json">적용 + 사이드카 JSON 저장</button></div>`;
+    const apply = () => {
+      const transform = r.mode === 'similarity' ? { s: r.s, R: r.R, t: r.t } : null;
+      state.unit = { known: true, factor: r.s, sigmaRel: r.extent > 0 ? r.rms / (r.extent * r.s) : 0, source: `기준점 ${used.length}개 (${r.mode === 'similarity' ? '축척+회전+이동' : '축척'}, RMS ${r.rms.toFixed(3)} m${crs ? ', ' + crs : ''})`, transform, crs };
+      try { localStorage.setItem(fileKey(), JSON.stringify({ factor: r.s, sigmaRel: state.unit.sigmaRel, when: Date.now(), source: state.unit.source, transform, crs })); } catch (_) {}
+      applyUnitUI(); toast(`<b>기준점 보정 적용</b> 1 u = ${r.s.toPrecision(6)} m${transform ? ' · 좌표가 실제 좌표계로 표시됩니다' : ''}`, 'good');
+    };
+    $('#gcp-apply').onclick = () => { apply(); closeModal(); };
+    $('#gcp-json').onclick = () => { apply(); download(`${state.file.name}.scale.json`, JSON.stringify({ units: 'model', scale_to_meters: r.s, scale_sigma_rel: state.unit.sigmaRel, transform: state.unit.transform, crs, gcp: used.map((p, k) => ({ point: p.name, model: p.p.toArray(), real_m: Q[k].toArray(), residual_m: r.residuals[k] })), file: { name: state.file.name, size: state.file.size }, generated_by: '3DGS 다시점 거리 측정기', when: new Date().toISOString() }, null, 2), 'application/json'); closeModal(); };
+  };
 }
 function openCalibResult(t, di) {
   if (!(di.d > 1e-9) || !(t.trueLen > 0)) { showError('E10', `측정 거리 ${di.d}`); return; }
   const s = t.trueLen / di.d; const rel = di.sigma / di.d;
-  openModal(`<h2>축척 보정 결과</h2><div class="wizard-steps"><span class="done"></span><span class="done"></span><span class="done"></span></div>
-  <div class="kv"><span>측정 거리 (모델 단위)</span><b>${di.d.toFixed(5)} u ± ${di.sigma.toFixed(5)}</b><span>참값</span><b>${t.trueLen} m ${t.desc ? `(${t.desc})` : ''}</b><span>축척계수 s = 참값 ÷ 측정</span><b class="bigval">1 u = ${s.toPrecision(6)} m</b><span>축척 상대 불확도</span><b>≈ ${(rel * 100).toFixed(2)} %</b></div>
+  openModal(`<h2>① 길이 보정 결과</h2><div class="wizard-steps"><span class="done"></span><span class="done"></span><span class="done"></span></div>
+  <div class="kv"><span>측정 거리 (모델 단위)</span><b>${di.d.toFixed(5)} u ± ${di.sigma.toFixed(5)}</b><span>참값</span><b>${t.trueLen} m ${t.desc ? `(${t.desc})` : ''}</b><span>축척 = 참값 ÷ 측정</span><b class="bigval">1 u = ${s.toPrecision(6)} m</b><span>축척 상대 불확도</span><b>≈ ${(rel * 100).toFixed(2)} %</b></div>
   <p class="muted small">적용하면 모든 점 좌표·거리가 미터로 표시되고, 이 파일(이름+크기)에 대해 브라우저에 저장되어 다음에 다시 열 때 자동 적용됩니다. 다른 컴퓨터에서도 쓰려면 사이드카 JSON을 내려받아 파일 옆에 두세요.</p>
   <div class="btnrow"><button class="btn primary" id="cal-apply">적용</button><button class="btn" id="cal-json">적용 + 사이드카 JSON 저장</button><button class="btn ghost" id="cal-cancel">취소</button></div>`);
-  const apply = () => { state.unit = { known: true, factor: s, sigmaRel: rel, source: `축척 보정 (참값 ${t.trueLen} m${t.desc ? ', ' + t.desc : ''})` }; try { localStorage.setItem(fileKey(), JSON.stringify({ factor: s, sigmaRel: rel, when: Date.now(), trueLen: t.trueLen, desc: t.desc })); } catch (_) {} applyUnitUI(); toast(`<b>축척 적용</b> 1 u = ${s.toPrecision(6)} m — 이제 거리가 미터로 표시됩니다.`, 'good'); };
+  const apply = () => { state.unit = { known: true, factor: s, sigmaRel: rel, source: `길이 보정 (참값 ${t.trueLen} m${t.desc ? ', ' + t.desc : ''})` }; try { localStorage.setItem(fileKey(), JSON.stringify({ factor: s, sigmaRel: rel, when: Date.now(), trueLen: t.trueLen, desc: t.desc, source: state.unit.source })); } catch (_) {} applyUnitUI(); toast(`<b>축척 적용</b> 1 u = ${s.toPrecision(6)} m — 이제 거리가 미터로 표시됩니다.`, 'good'); };
   $('#cal-apply').onclick = () => { apply(); closeModal(); };
   $('#cal-json').onclick = () => { apply(); download(`${state.file.name}.scale.json`, JSON.stringify({ units: 'model', scale_to_meters: s, scale_sigma_rel: rel, calibrated_with: { true_length_m: t.trueLen, measured_model_units: di.d, desc: t.desc }, file: { name: state.file.name, size: state.file.size }, generated_by: '3DGS 다시점 거리 측정기', when: new Date().toISOString() }, null, 2), 'application/json'); closeModal(); };
   $('#cal-cancel').onclick = closeModal;
 }
 function openManualScale() {
-  openModal(`<h2>축척 직접 입력</h2><p>이 모델에서 <b>1 모델 단위가 실제로 몇 m</b>인지 아는 경우에만 사용하세요. (예: gs_ply_georef.py 가 출력한 축척, GCP 지오리퍼런싱의 Scale 값)</p><div class="form-row"><label>1 u =</label><input id="man-s" type="number" step="any" min="0" placeholder="예: 4.2015"><span>m</span><input id="man-src" type="text" placeholder="출처(선택)" style="flex:1;min-width:160px"></div><div class="btnrow"><button class="btn primary" id="man-apply">적용</button><button class="btn ghost" id="man-reset">축척 정보 지우기(모델 단위로)</button></div>`);
+  openModal(`<h2>③ 축척 직접 입력</h2><p>이 모델에서 <b>모델 좌표 1 단위(u)가 실제로 몇 m</b>인지 이미 아는 경우에만 사용하세요. (예: gs_ply_georef.py 가 출력한 축척 4.2015, GCP 지오리퍼런싱 결과의 Scale 9.7429.) 실제 좌표를 아는 기준점이 있다면 <a href="#" id="man-gcp">② 기준점 좌표로 보정</a>이 더 정확합니다.</p><div class="form-row"><label>모델 1 u = 실제</label><input id="man-s" type="number" step="any" min="0" placeholder="예: 4.2015"><span>m</span><input id="man-src" type="text" placeholder="출처(선택)" style="flex:1;min-width:160px"></div><div class="btnrow"><button class="btn primary" id="man-apply">적용</button><button class="btn ghost" id="man-reset">축척 정보 지우기(모델 단위로)</button></div>`);
+  $('#man-gcp').onclick = (e) => { e.preventDefault(); openGcpCalib(); };
   $('#man-apply').onclick = () => { const s = parseFloat($('#man-s').value); if (!(s > 0)) { showError('E10', '축척은 0보다 큰 숫자여야 합니다.'); return; } state.unit = { known: true, factor: s, sigmaRel: 0, source: `직접 입력${$('#man-src').value ? ' (' + $('#man-src').value + ')' : ''}` }; try { localStorage.setItem(fileKey(), JSON.stringify({ factor: s, sigmaRel: 0, when: Date.now(), manual: true })); } catch (_) {} applyUnitUI(); closeModal(); };
   $('#man-reset').onclick = () => { try { localStorage.removeItem(fileKey()); } catch (_) {} state.unit = { known: false, factor: 1, sigmaRel: 0, source: '' }; applyUnitUI(); closeModal(); };
 }
 function openExport() {
   if (!state.points.length) { toast('내보낼 측정 결과가 없습니다. 먼저 점을 재세요.', 'warn'); return; }
   openModal(`<h2>내보내기</h2><p class="muted small">단위: ${state.unit.known ? `미터 (${state.unit.source})` : '<b>모델 단위(u)</b> — 축척 정보가 없어 미터 열은 비어 있습니다'}</p><div class="btnrow"><button class="btn primary" id="ex-csv">CSV (점 + 거리)</button><button class="btn" id="ex-json">JSON (공분산·광선 포함)</button><button class="btn" id="ex-png">PNG 스크린샷</button></div>`);
-  $('#ex-csv').onclick = () => { const f = state.unit.known ? state.unit.factor : null; let csv = '﻿type,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg\n'; for (const p of state.points) csv += `point,${p.id},${p.name},${p.p.x},${p.p.y},${p.p.z},${p.sigma0},${f ? p.p.x * f : ''},${f ? p.p.y * f : ''},${f ? p.p.z * f : ''},${f ? p.sigma0 * f : ''},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)}\n`; csv += '\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,unit_source\n'; for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const di = distanceInfo(a, b); csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ''},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ''},"${state.unit.known ? state.unit.source : '축척 정보 없음(모델 단위)'}"\n`; } download(`${state.file.name}.measurements.csv`, csv, 'text/csv'); };
+  $('#ex-csv').onclick = () => { const f = state.unit.known ? state.unit.factor : null; let csv = '﻿type,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs\n'; for (const p of state.points) { const rr = toReal(p.p); csv += `point,${p.id},${p.name},${p.p.x},${p.p.y},${p.p.z},${p.sigma0},${f ? p.p.x * f : ''},${f ? p.p.y * f : ''},${f ? p.p.z * f : ''},${f ? p.sigma0 * f : ''},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ''},${rr ? rr.y : ''},${rr ? rr.z : ''},${rr ? state.unit.crs || '' : ''}\n`; } csv += '\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,unit_source\n'; for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const di = distanceInfo(a, b); csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ''},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ''},"${state.unit.known ? state.unit.source : '축척 정보 없음(모델 단위)'}"\n`; } download(`${state.file.name}.measurements.csv`, csv, 'text/csv'); };
   $('#ex-json').onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $('#up-label').textContent, points: state.points.map((p) => ({ ...p, p: p.p.toArray(), cov: p.cov.toArray() })), distances: state.dists.map((d) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); const di = a && b ? distanceInfo(a, b) : null; return { a: d.a, b: d.b, dist_model: di?.d, sigma_model: di?.sigma }; }), method: 'Deng & Qin 2026 multi-ray least-squares spatial intersection', when: new Date().toISOString() }, null, 2), 'application/json');
   $('#ex-png').onclick = () => { const gl = renderer.domElement; const c = document.createElement('canvas'); c.width = gl.width; c.height = gl.height; const x = c.getContext('2d'); x.drawImage(gl, 0, 0); x.drawImage(overlay, 0, 0, c.width, c.height); c.toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${state.file.name}.measure.png`; a.click(); }); };
 }
@@ -688,7 +796,8 @@ $$('#menu-up button').forEach((b) => (b.onclick = () => setUp(new THREE.Vector3(
 $('#btn-autorot').onclick = () => autoRotate();
 $('#live-autorot').onclick = () => setSetting('autoRotate', !state.settings.autoRotate);
 $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => (b.onclick = () => setSetting('loupeSize', b.dataset.ls)));
-$('#set-autorot').onchange = (e) => setSetting('autoRotate', e.target.checked); $('#set-hires').onchange = (e) => { state.loupeHiResFailed = false; setSetting('loupeHiRes', e.target.checked); }; $('#btn-undo').onclick = undoRay; $('#btn-worst').onclick = removeWorst; $('#btn-finish').onclick = () => finishPoint(); $('#btn-cancel').onclick = () => { if (state.rays.length) { cancelPoint(); toast('현재 점 측정을 취소했습니다.', 'info', 3000); } else endTask(); };
+$('#set-autorot').onchange = (e) => setSetting('autoRotate', e.target.checked);
+$$('#live-rotpat, #set-rotpat').forEach((el) => (el.onchange = (e) => setSetting('rotPattern', e.target.value))); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.onchange = (e) => setSetting('rotAxis', e.target.value))); $$('#live-rotstep, #set-rotstep').forEach((el) => (el.onchange = (e) => setSetting('rotStep', Math.max(0, Math.min(180, +e.target.value || 0))))); $('#set-hires').onchange = (e) => { state.loupeHiResFailed = false; setSetting('loupeHiRes', e.target.checked); }; $('#btn-undo').onclick = undoRay; $('#btn-worst').onclick = removeWorst; $('#btn-finish').onclick = () => finishPoint(); $('#btn-cancel').onclick = () => { if (state.rays.length) { cancelPoint(); toast('현재 점 측정을 취소했습니다.', 'info', 3000); } else endTask(); };
 $('#ray-table').addEventListener('click', (e) => { if (e.target.closest('[data-undo]')) undoRay(); });
 $('#pt-table').addEventListener('change', (e) => { const cb = e.target.closest('[data-sel]'); if (!cb) return; const id = +cb.dataset.sel; if (cb.checked) { if (state.selected.size >= 2) { const first = [...state.selected][0]; state.selected.delete(first); } state.selected.add(id); } else state.selected.delete(id); renderResults(); });
 $('#pt-table').addEventListener('click', (e) => { const d = e.target.closest('[data-del]'); if (!d) return; const id = +d.dataset.del; state.points = state.points.filter((p) => p.id !== id); state.dists = state.dists.filter((x) => x.a !== id && x.b !== id); state.selected.delete(id); renderResults(); });
@@ -704,6 +813,7 @@ function syncSettingsUI() {
   $('#set-hires').checked = st.loupeHiRes; $('#set-autorot').checked = st.autoRotate;
   $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => b.classList.toggle('on', b.dataset.ls === st.loupeSize));
   const t = $('#live-autorot'); t.textContent = st.autoRotate ? '켬' : '끔'; t.classList.toggle('on', st.autoRotate);
+  $$('#live-rotpat, #set-rotpat').forEach((el) => (el.value = st.rotPattern)); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.value = st.rotAxis)); $$('#live-rotstep, #set-rotstep').forEach((el) => { el.value = st.rotStep > 0 ? st.rotStep : ''; el.placeholder = `자동 ${autoStepDeg().toFixed(0)}°`; });
   $('#btn-autorot').title = `측정 중인 점을 중심으로 ${autoStepDeg().toFixed(0)}° 더 돌립니다 (R)`;
 }
 try { const saved = JSON.parse(localStorage.getItem('gsm.settings') || 'null'); if (saved && typeof saved === 'object') Object.assign(state.settings, saved); } catch (_) {}
@@ -723,7 +833,7 @@ document.addEventListener('pointerdown', (e) => { if (e.target !== renderer?.dom
 document.addEventListener('pointerup', (e) => { if (!down || e.button !== 0) return; const mv = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (mv < 5 && state.task && e.target === renderer.domElement) { const r = renderer.domElement.getBoundingClientRect(); onMeasureClick(e.clientX - r.left, e.clientY - r.top); } });
 document.addEventListener('pointermove', (e) => { if (!renderer) return; const r = renderer.domElement.getBoundingClientRect(); state.mouse.x = e.clientX - r.left; state.mouse.y = e.clientY - r.top; state.mouse.inside = e.target === renderer.domElement; });
 // 키
-document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (e.key === 'Enter') finishPoint(); else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(8, state.settings.zoom + (e.key === ']' ? 1 : -1)))); });
+document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (e.key === 'Enter') finishPoint(); else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(8, state.settings.zoom + (e.key === ']' ? 1 : -1)))); });
 function resetAll(keepFile) { state.points = []; state.dists = []; state.selected.clear(); state.nextId = 1; state.task = null; cancelPoint(false); $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active')); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; renderResults(); }
 function runTour() { document.getElementById('app').classList.add('tour-active'); startTour(TOUR_STEPS, { onDone: () => { document.getElementById('app').classList.remove('tour-active'); try { localStorage.setItem('gsm.tourSeen', '1'); } catch (_) {} } }); }
 
@@ -742,7 +852,9 @@ window.__app = {
   setCamera(pos, target, up) { if (up) camera.up.set(...up); camera.position.set(...pos); controls.target.set(...target); controls.update(); renderer.render(scene, camera); },
   project(p) { return project(new THREE.Vector3(...p)); },
   click(px, py) { onMeasureClick(px, py); },
-  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, get animating() { return anims.length > 0; }, openChecklist, openCalibWizard, applyManualScale(s) { state.unit = { known: true, factor: s, sigmaRel: 0, source: 'test' }; applyUnitUI(); },
+  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
+  debugAddPoint(xyz, name) { const p = { id: state.nextId++, name: name || `P${state.nextId - 1}`, p: new THREE.Vector3(...xyz), sigma0: 1e-4, cov: new THREE.Matrix3().identity().multiplyScalar(1e-8), n: 5, quality: 'good', pxRms: 0.1, maxAngleDeg: 60, rays: [] }; state.points.push(p); renderResults(); return p; },
+  openGcpCalib, setGcp(name, xyz) { state.gcpInputs[name] = { x: xyz[0], y: xyz[1], z: xyz[2] }; }, openChecklist, openCalibWizard, applyManualScale(s) { state.unit = { known: true, factor: s, sigmaRel: 0, source: 'test' }; applyUnitUI(); },
   distanceInfo, intersectRays, render() { renderer.render(scene, camera); drawOverlay(); },
   pixel(px, py) { const g = grabGray(px, py, 3); const r = glRatio(); scratch.width = 1; scratch.height = 1; sctx.drawImage(renderer.domElement, px * r, py * r, 1, 1, 0, 0, 1, 1); return Array.from(sctx.getImageData(0, 0, 1, 1).data); },
 };
