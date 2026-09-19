@@ -11,6 +11,7 @@ Stereoscopic-View Based Measurements* ([arXiv 2603.24716](https://arxiv.org/abs/
 - 안내선(에피폴라 선)·확대창·자동 정밀 보정·자동 회전으로 다시점 클릭을 돕고, 축척 등 **없는 정보는 무엇이 없어서 안 되는지** 정확히 알립니다(E01~E13).
 - 열기: ① **온라인 https://rocheol2.github.io/3DGS_Accurate_Point_Mesurement/** (배포됨) ② `webapp/dist/3DGS_거리측정기_단일파일_조작메뉴.html` 더블클릭(서버·인터넷 불필요, 2026-09-19 최신: 플로팅 조작 패널, 회전 방향 제어, 기준점(GCP) 좌표 보정, 확대창 크기·고해상도) ③ `tools/start_webapp.sh`(로컬 서버 + 브라우저 자동 실행). ⚠ `webapp/index.html` 을 직접 더블클릭하면 브라우저가 스크립트를 차단해 동작하지 않습니다.
 - **기능·조작법 요약: [webapp/README.md](webapp/README.md)**
+- 개별 작업 보고서: [보고서_점군보기_1클릭직접선택_20260919.md](보고서_점군보기_1클릭직접선택_20260919.md)
 - 문서: [웹앱_사용법.md](웹앱_사용법.md) · [웹앱_작업결과_보고서.md](웹앱_작업결과_보고서.md) · 앱 안 도움말 [webapp/help.html](webapp/help.html) · 첫 방문 시 기능 소개 투어 자동 실행
 - 검증: 합성 2.000 m 정육면체 5시점 클릭 → 3D 오차 2.5~3.6 mm, 거리 2.0019 ± 0.0036 m (헤드리스 Chrome 자동 테스트)
 
