@@ -59,6 +59,14 @@
     <div class="group">
       <button id="btn-point" class="btn primary" disabled title="점 하나를 여러 각도에서 클릭해 3D 좌표를 잽니다 (M)">● 점 측정 <kbd>M</kbd></button>
       <button id="btn-dist" class="btn primary" disabled title="점 A, 점 B 를 차례로 재서 거리를 표시합니다 (D)">↔ 거리 측정 <kbd>D</kbd></button>
+      <div class="dropdown">
+        <button id="btn-analyze" class="btn" disabled title="각도·길이·면적 — 점을 새로 재거나 이미 잰 점(마커)을 클릭해 재사용">📐 분석 ▾</button>
+        <div class="menu" id="menu-analyze">
+          <button data-an="angle">∠ 각도 — 점 3개 (A, 꼭짓점 B, C) <kbd>A</kbd></button>
+          <button data-an="polyline">⌒ 길이 / 둘레 — 점 2개 이상 순서대로 <kbd>L</kbd></button>
+          <button data-an="area">▱ 면적 — 꼭짓점 3개 이상 순서대로 <kbd>P</kbd></button>
+        </div>
+      </div>
     </div>
     <div class="group">
       <button id="btn-scale" class="btn" disabled title="실제 길이를 아는 구간으로 축척을 맞춥니다">📏 축척 보정</button>
@@ -115,6 +123,7 @@
       </div>
       <div id="measure-live" hidden>
         <div class="task-title" id="task-title">점 측정</div>
+        <div id="task-pts" class="small muted"></div>
         <div class="progress"><div id="progress-bar"></div></div>
         <div class="rowline"><span>광선 <b id="ray-count">0</b> / <span id="ray-target">5</span></span><span>최대 각도 <b id="ray-angle">–</b></span></div>
         <div class="anglemeter"><div id="angle-fill"></div><span id="angle-text">카메라를 20° 이상 돌리세요</span></div>
@@ -141,6 +150,7 @@
         </div>
         <div class="btnrow">
           <button id="btn-finish" class="btn small primary" title="지금까지의 광선으로 점 확정 (Enter)">✔ 점 확정 <kbd>Enter</kbd></button>
+          <button id="btn-geom-finish" class="btn small primary" hidden title="선택한 점들로 길이/면적 완성 (Enter)">✔ 완성 <kbd>Enter</kbd></button>
           <button id="btn-cancel" class="btn small ghost" title="이 점 측정 취소 (Esc)">✖ 취소 <kbd>Esc</kbd></button>
         </div>
       </div>
@@ -152,7 +162,9 @@
       <table class="pts" id="pt-table"><thead><tr><th></th><th>이름</th><th>좌표</th><th>σ</th><th>N</th><th></th></tr></thead><tbody></tbody></table>
       <div class="btnrow"><button id="btn-dist-sel" class="btn small" disabled>선택 두 점 거리</button><button id="btn-clear" class="btn small ghost">전체 지우기</button></div>
       <h4>거리</h4>
-      <table class="dists" id="dist-table"><thead><tr><th>A–B</th><th>거리</th><th>±</th><th></th></tr></thead><tbody></tbody></table>
+      <table class="dists" id="dist-table"><thead><tr><th>A–B</th><th>3D 거리</th><th>수평</th><th>고저차</th><th>경사</th><th></th></tr></thead><tbody></tbody></table>
+      <h4>분석 <span class="muted">(각도 · 길이/둘레 · 면적)</span></h4>
+      <table class="geoms" id="geom-table"><thead><tr><th>항목</th><th>값</th><th></th></tr></thead><tbody></tbody></table>
     </section>
 
     <section class="tabpane" data-pane="settings">
@@ -172,7 +184,7 @@
       <label class="field check"><input id="set-navpad" type="checkbox" checked> 플로팅 조작 패널 표시 <span class="muted small">(마우스 없이 버튼으로 회전·확대·이동)</span></label>
       <label class="field">조작 패널 회전 단계 <span><input id="set-navstep" type="number" min="1" max="90" step="1" value="15"> ° <span class="muted small">(한 번 클릭당)</span></span></label>
       <div class="btnrow"><button id="btn-scale-manual" class="btn small">축척 직접 입력</button><button id="btn-tour" class="btn small ghost">기능 소개 투어 다시 보기</button></div>
-      <p class="muted small">마우스: 왼쪽 드래그 회전 · 휠 확대(커서 방향) · 오른쪽 드래그 이동. 키: M 점, D 거리, R 다음 각도, ← → ↑ ↓ 그 방향으로 회전, Enter 확정, Esc 취소, Backspace 마지막 취소, F 추정점에 초점, H 홈.</p>
+      <p class="muted small">마우스: 왼쪽 드래그 회전 · 휠 확대(커서 방향) · 오른쪽 드래그 이동. 키: M 점, D 거리, A 각도, L 길이, P 면적, R 다음 각도, ← → ↑ ↓ 그 방향으로 회전, Enter 확정, Esc 취소, Backspace 마지막 취소, F 추정점에 초점, H 홈.</p>
     </section>
   </aside>
 

@@ -17,7 +17,7 @@ const state = {
   upSource: null,
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
   rays: [], estimate: null, refPatch: null, autoRotCount: 0,
-  points: [], dists: [], selected: new Set(), nextId: 1,
+  points: [], dists: [], geoms: [], selected: new Set(), nextId: 1, nextGeomId: 1,
   settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, dunit: 'auto', labels: true },
   autoPivot: null, autoAngleDeg: 0, autoTiltDeg: 0, loupeHiResFailed: false, gcpInputs: {},
   mouse: { x: 0, y: 0, inside: false },
@@ -328,6 +328,85 @@ function intersectRays(rays) {
   const quality = (pxRms <= 1.5 && maxAngleDeg >= 20) ? 'good' : (pxRms <= 4 && maxAngleDeg >= 10) ? 'fair' : 'poor';
   return { p, sigma0, cov, residuals, pxResid, pxRms, maxAngleDeg, n, quality };
 }
+// ================================================================== 분석 1단계: 각도 · 수평/수직/경사 · 폴리라인 길이 · 면적
+function upVec() { return camera.up.clone().normalize(); }
+function jacobiSym(A) { // 대칭 n×n 고유분해 → { vals[], vecs[][] (vecs[k] = k번째 고유벡터) }
+  const n = A.length; const a = A.map((r) => r.slice()); const v = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+  for (let sweep = 0; sweep < 80; sweep++) {
+    let off = 0; for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += a[p][q] * a[p][q]; if (off < 1e-30) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+      if (Math.abs(a[p][q]) < 1e-300) continue; const th = (a[q][q] - a[p][p]) / (2 * a[p][q]); const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)); const c = 1 / Math.sqrt(t * t + 1), s2 = t * c;
+      for (let k = 0; k < n; k++) { const akp = a[k][p], akq = a[k][q]; a[k][p] = c * akp - s2 * akq; a[k][q] = s2 * akp + c * akq; }
+      for (let k = 0; k < n; k++) { const apk = a[p][k], aqk = a[q][k]; a[p][k] = c * apk - s2 * aqk; a[q][k] = s2 * apk + c * aqk; }
+      for (let k = 0; k < n; k++) { const vkp = v[k][p], vkq = v[k][q]; v[k][p] = c * vkp - s2 * vkq; v[k][q] = s2 * vkp + c * vkq; }
+    }
+  }
+  return { vals: a.map((r, i) => r[i]), vecs: Array.from({ length: n }, (_, k) => v.map((row) => row[k])) };
+}
+// 점 좌표의 함수 fn(x[]) 값과, 각 점 공분산을 수치 미분으로 전파한 표준편차
+function propagate(fn, pts) {
+  const x = pts.flatMap((p) => [p.p.x, p.p.y, p.p.z]); const v0 = fn(x); const h = 1e-6 * Math.max(1, state.bounds?.radius || 1); let variance = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const J = [0, 0, 0]; for (let k = 0; k < 3; k++) { const xp = x.slice(), xm = x.slice(); xp[3 * i + k] += h; xm[3 * i + k] -= h; J[k] = (fn(xp) - fn(xm)) / (2 * h); }
+    const c = pts[i].cov.elements; // column-major, 대칭
+    variance += J[0] * (c[0] * J[0] + c[3] * J[1] + c[6] * J[2]) + J[1] * (c[1] * J[0] + c[4] * J[1] + c[7] * J[2]) + J[2] * (c[2] * J[0] + c[5] * J[1] + c[8] * J[2]);
+  }
+  return { v: v0, sigma: Math.sqrt(Math.max(0, variance)) };
+}
+const V3 = (x, i) => new THREE.Vector3(x[3 * i], x[3 * i + 1], x[3 * i + 2]);
+function fnAngleDeg(x) { const u = V3(x, 0).sub(V3(x, 1)), w = V3(x, 2).sub(V3(x, 1)); const d = u.dot(w) / (u.length() * w.length() || 1e-12); return Math.acos(THREE.MathUtils.clamp(d, -1, 1)) / DEG; }
+function fnPolyLen(closed) { return (x) => { const n = x.length / 3; let L = 0; for (let i = 0; i + 1 < n; i++) L += V3(x, i).distanceTo(V3(x, i + 1)); if (closed && n > 2) L += V3(x, n - 1).distanceTo(V3(x, 0)); return L; }; }
+function planeFit(P) { // P: Vector3[] → { c, n(단위 법선), e1, e2, rms }
+  const c = new THREE.Vector3(); P.forEach((p) => c.add(p)); c.divideScalar(P.length);
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; for (const p of P) { const d = [p.x - c.x, p.y - c.y, p.z - c.z]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) M[i][j] += d[i] * d[j]; }
+  const { vals, vecs } = jacobiSym(M); const order = [0, 1, 2].sort((a, b) => vals[a] - vals[b]);
+  const n = new THREE.Vector3(...vecs[order[0]]).normalize(), e1 = new THREE.Vector3(...vecs[order[2]]).normalize(); const e2 = new THREE.Vector3().crossVectors(n, e1).normalize();
+  let ss = 0; for (const p of P) { const r = p.clone().sub(c).dot(n); ss += r * r; } return { c, n, e1, e2, rms: Math.sqrt(ss / P.length) };
+}
+function shoelace(pts2) { let a = 0; for (let i = 0; i < pts2.length; i++) { const p = pts2[i], q = pts2[(i + 1) % pts2.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a) / 2; }
+function fnArea(x) { const n = x.length / 3; const P = Array.from({ length: n }, (_, i) => V3(x, i)); const pf = planeFit(P); return shoelace(P.map((p) => { const d = p.clone().sub(pf.c); return [d.dot(pf.e1), d.dot(pf.e2)]; })); }
+function fnAreaHoriz(x) { const n = x.length / 3; const up = upVec(); let h = new THREE.Vector3(1, 0, 0); if (Math.abs(h.dot(up)) > 0.9) h.set(0, 1, 0); h.projectOnPlane(up).normalize(); const h2 = new THREE.Vector3().crossVectors(up, h); return shoelace(Array.from({ length: n }, (_, i) => { const p = V3(x, i); return [p.dot(h), p.dot(h2)]; })); }
+function distanceDecomp(a, b) { // 3D 거리 + 수평·고저차·경사
+  const up = upVec(); const di = distanceInfo(a, b);
+  const fh = (x) => { const d = V3(x, 1).sub(V3(x, 0)); return d.clone().sub(up.clone().multiplyScalar(d.dot(up))).length(); };
+  const fv = (x) => V3(x, 1).sub(V3(x, 0)).dot(up);
+  const H = propagate(fh, [a, b]), V = propagate(fv, [a, b]);
+  const slopeDeg = Math.atan2(Math.abs(V.v), H.v) / DEG, slopePct = H.v > 1e-9 ? Math.abs(V.v) / H.v * 100 : Infinity;
+  return { ...di, h: H.v, sigmaH: H.sigma, v: V.v, sigmaV: V.sigma, slopeDeg, slopePct };
+}
+function geomInfo(g) { // 저장된 분석 항목의 값 계산 (점이 지워졌으면 null)
+  const pts = g.ptIds.map((id) => state.points.find((p) => p.id === id)); if (pts.some((p) => !p)) return null;
+  if (g.type === 'angle') { const r = propagate(fnAngleDeg, pts); return { pts, main: r.v, sigma: r.sigma, text: `${r.v.toFixed(2)}° ± ${r.sigma.toFixed(2)}°`, extra: `꼭짓점 ${pts[1].name}` }; }
+  if (g.type === 'polyline') { const r = propagate(fnPolyLen(false), pts); return { pts, main: r.v, sigma: r.sigma, text: fmtLen(r.v, r.sigma, true), extra: `${pts.length}점 · 구간 ${pts.length - 1}` }; }
+  if (g.type === 'area') {
+    const A = propagate(fnArea, pts), Ah = propagate(fnAreaHoriz, pts), per = propagate(fnPolyLen(true), pts); const pf = planeFit(pts.map((p) => p.p));
+    let tilt = Math.acos(THREE.MathUtils.clamp(Math.abs(pf.n.dot(upVec())), 0, 1)) / DEG;
+    return { pts, main: A.v, sigma: A.sigma, text: fmtArea(A.v, A.sigma), extra: `수평투영 ${fmtArea(Ah.v)} · 둘레 ${fmtLen(per.v, per.sigma, true)} · 면 기울기 ${tilt.toFixed(1)}° · 평면 잔차 RMS ${fmtLen(pf.rms)}`, tilt, per: per.v, ah: Ah.v, rms: pf.rms };
+  }
+  return null;
+}
+function fmtArea(aModel, sig = null) {
+  if (!state.unit.known) return `${aModel.toFixed(4)} u²${sig != null ? ` ± ${sig.toFixed(4)}` : ''}`;
+  const f2 = state.unit.factor * state.unit.factor; let a = aModel * f2, sg = sig != null ? Math.sqrt((sig * f2) ** 2 + (2 * a * state.unit.sigmaRel) ** 2) : null;
+  const cm = a < 1; const k = cm ? 1e4 : 1, dec = cm ? 1 : 3; return `${(a * k).toFixed(dec)}${sg != null ? ` ± ${(sg * k).toFixed(dec)}` : ''} ${cm ? 'cm²' : 'm²'}`;
+}
+const GEOM_NEED = { angle: 3, polyline: 2, area: 3 }; const GEOM_LABEL = { angle: '∠ 각도', polyline: '⌒ 길이', area: '▱ 면적' };
+function addGeom(type, pts) { const g = { id: state.nextGeomId++, type, name: `${type === 'angle' ? 'A' : type === 'polyline' ? 'L' : 'S'}${state.nextGeomId - 1}`, ptIds: pts.map((p) => p.id) }; state.geoms.push(g); const gi = geomInfo(g); toast(`<b>${GEOM_LABEL[type]} ${g.name}</b> = <span style="font-size:17px">${gi.text}</span><br><span class="muted small">${gi.extra}</span>${state.unit.known || type === 'angle' ? '' : ' <span class="muted">(모델 단위 — 축척 보정 필요)</span>'}`, 'good', 9000); renderResults(); return g; }
+function finishGeometry() {
+  const t = state.task; if (!t || !GEOM_NEED[t.kind]) return;
+  if (state.rays.length) { toast('먼저 진행 중인 점을 확정(Enter)하거나 취소(Esc)하세요.', 'warn', 3000); return; }
+  if (t.pts.length < GEOM_NEED[t.kind]) { toast(`${GEOM_LABEL[t.kind]}에는 점이 ${GEOM_NEED[t.kind]}개 이상 필요합니다 (현재 ${t.pts.length}개).`, 'warn', 3500); return; }
+  addGeom(t.kind, t.pts); endTask();
+}
+// 작업에 점이 추가된 뒤 (새 측정 또는 기존 점 재사용) 종류별 처리
+function taskPointAdded(t) {
+  if (t.kind === 'point') { updateMeasureUI(); }
+  else if (t.kind === 'distance') { if (t.pts.length === 2) { addDistance(t.pts[0], t.pts[1]); endTask(); } else updateMeasureUI(); }
+  else if (t.kind === 'calib') { if (t.pts.length === 2) { const di = distanceInfo(t.pts[0], t.pts[1]); endTask(); openCalibResult(t, di); } else updateMeasureUI(); }
+  else if (t.kind === 'angle') { if (t.pts.length === 3) { addGeom('angle', t.pts); endTask(); } else updateMeasureUI(); }
+  else updateMeasureUI();
+}
+function pickExistingPoint(px, py) { let best = null, bd = 14; for (const p of state.points) { const s = project(p.p); if (!s.front) continue; const d = Math.hypot(s.x - px, s.y - py); if (d < bd) { bd = d; best = p; } } return best; }
 function distanceInfo(a, b) {
   const v = b.p.clone().sub(a.p); const d = v.length(); if (d < 1e-12) return { d: 0, sigma: 0 };
   const u = v.clone().divideScalar(d); const Q = a.cov.clone(); const be = b.cov.elements; for (let i = 0; i < 9; i++) Q.elements[i] += be[i];
@@ -481,7 +560,7 @@ async function loadFiles(fileList) {
   resolveUnits(header, sidecar);
   // UI
   $('#loading').hidden = true; $('#dropzone').classList.add('hidden');
-  ['#btn-point', '#btn-dist', '#btn-scale', '#btn-export', '#btn-up', '#btn-home', '#btn-navpad'].forEach((s) => ($(s).disabled = false));
+  ['#btn-point', '#btn-dist', '#btn-scale', '#btn-export', '#btn-up', '#btn-home', '#btn-navpad', '#btn-analyze'].forEach((s) => ($(s).disabled = false));
   $('#navpad').hidden = !state.settings.navpad;
   glHost.classList.remove('measuring');
   coach('', `<b>${main.name}</b> 열림 (가우시안 ${state.file.count ? state.file.count.toLocaleString() : '?'}개). <b>● 점 측정</b> 또는 <b>↔ 거리 측정</b>을 누르고, 휠로 잴 곳을 확대하세요.`);
@@ -516,7 +595,7 @@ function startTask(kind, extra = {}) {
   cancelPoint(false);
   state.task = { kind, pts: [], ...extra };
   $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active'));
-  if (kind === 'point') $('#btn-point').classList.add('active'); if (kind === 'distance') $('#btn-dist').classList.add('active');
+  if (kind === 'point') $('#btn-point').classList.add('active'); if (kind === 'distance') $('#btn-dist').classList.add('active'); $('#btn-analyze').classList.toggle('active', !!GEOM_NEED[kind]);
   glHost.classList.add('measuring'); showTab('measure'); $('#measure-idle').hidden = true; $('#measure-live').hidden = false;
   updateMeasureUI();
 }
@@ -525,11 +604,14 @@ function taskLabel() {
   if (t.kind === 'point') return `점 측정 (P${state.nextId})`;
   if (t.kind === 'distance') return `거리 측정 — ${t.pts.length === 0 ? 'A점' : 'B점'}`;
   if (t.kind === 'calib') return `축척 보정 — ${t.pts.length === 0 ? '기준 구간 A점' : '기준 구간 B점'}`;
+  if (t.kind === 'angle') return `각도 측정 — ${['A점(한쪽 끝)', 'B점(꼭짓점)', 'C점(다른 끝)'][t.pts.length] || ''}`;
+  if (t.kind === 'polyline') return `길이 측정 — ${t.pts.length + 1}번째 점 (2개 이상 → 완성)`;
+  if (t.kind === 'area') return `면적 측정 — ${t.pts.length + 1}번째 꼭짓점 (3개 이상, 순서대로 → 완성)`;
   return '';
 }
 function endTask() {
   state.task = null; cancelPoint(false);
-  $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active'));
+  $$('#btn-point,#btn-dist,#btn-analyze').forEach((b) => b.classList.remove('active'));
   glHost.classList.remove('measuring'); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; $('#loupe').hidden = true;
   coach('', state.mesh ? '<b>● 점 측정</b> 또는 <b>↔ 거리 측정</b>을 눌러 시작하세요.' : '3DGS 파일을 열어 시작하세요.');
 }
@@ -537,6 +619,10 @@ function cancelPoint(ui = true) { state.rays = []; state.estimate = null; state.
 function onMeasureClick(px, py) {
   if (!state.task || !state.mesh) return;
   if (anims.length) { toast('카메라 회전 중입니다. 멈춘 뒤 클릭하세요.', 'info', 1500); return; }
+  if (state.rays.length === 0 && state.task.kind !== 'point') { // 이미 잰 점 마커를 클릭하면 그 점을 재사용
+    const ex = pickExistingPoint(px, py);
+    if (ex) { const t = state.task; if (t.pts.includes(ex) && t.kind !== 'polyline') { toast(`${ex.name} 은 이미 선택되어 있습니다.`, 'warn', 2500); return; } t.pts.push(ex); toast(`기존 점 <b>${ex.name}</b> 사용`, 'info', 2500); taskPointAdded(t); renderResults(); return; }
+  }
   let pt = { x: px, y: py }; let note = '';
   if (state.rays.length >= 1) {
     const line = epipolarPolyline(state.rays[0]);
@@ -572,9 +658,7 @@ function finishPoint(force = false) {
   const t = state.task; t.pts.push(pt);
   toast(`<b>${pt.name} 확정</b> ${fmtCoord(pt.p)} · σ₀ ${fmtLen(pt.sigma0)} · 품질 <span class="badge ${pt.quality}">${QUALITY[pt.quality].label}</span>`, pt.quality === 'poor' ? 'warn' : 'good', 6000);
   cancelPoint(false);
-  if (t.kind === 'point') { updateMeasureUI(); }
-  else if (t.kind === 'distance') { if (t.pts.length === 2) { addDistance(t.pts[0], t.pts[1]); endTask(); } else updateMeasureUI(); }
-  else if (t.kind === 'calib') { if (t.pts.length === 2) { const di = distanceInfo(t.pts[0], t.pts[1]); endTask(); openCalibResult(t, di); } else updateMeasureUI(); }
+  taskPointAdded(t);
   renderResults(); updateCheckDot();
 }
 function addDistance(a, b) {
@@ -661,6 +745,12 @@ function drawOverlay() {
   // 측정된 점 · 거리
   if (state.settings.labels) {
     for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const pa = project(a.p), pb = project(b.p); if (!pa.front || !pb.front) continue; ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke(); const di = distanceInfo(a, b); pill(ctx, (pa.x + pb.x) / 2, (pa.y + pb.y) / 2 - 14, `${a.name}–${b.name}  ${fmtLen(di.d, di.sigma, true)}${state.unit.known ? '' : ' ⚠'}`, '#22d3ee'); }
+    for (const g of state.geoms) { const gi = geomInfo(g); if (!gi) continue; const S = gi.pts.map((p) => project(p.p)); if (S.some((q) => !q.front)) continue;
+      if (g.type === 'area') { ctx.fillStyle = '#f9731633'; ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2; ctx.beginPath(); S.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath(); ctx.fill(); ctx.stroke(); const cx = S.reduce((a, q) => a + q.x, 0) / S.length, cy = S.reduce((a, q) => a + q.y, 0) / S.length; pill(ctx, cx, cy, `${g.name} ${gi.text}`, '#f97316'); }
+      else if (g.type === 'polyline') { ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2; ctx.beginPath(); S.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.stroke(); const m = S[Math.floor(S.length / 2)]; pill(ctx, m.x + 8, m.y - 12, `${g.name} ${gi.text}`, '#f97316'); }
+      else if (g.type === 'angle') { const [A, B, C] = S; ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.lineTo(C.x, C.y); ctx.stroke(); const a1 = Math.atan2(A.y - B.y, A.x - B.x), a2 = Math.atan2(C.y - B.y, C.x - B.x); let d = a2 - a1; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; ctx.beginPath(); ctx.arc(B.x, B.y, 26, a1, a1 + d, d < 0); ctx.stroke(); const mid = a1 + d / 2; pill(ctx, B.x + 34 * Math.cos(mid), B.y + 34 * Math.sin(mid), `${g.name} ${gi.text}`, '#a78bfa'); }
+    }
+    if (state.task && GEOM_NEED[state.task.kind] && state.task.pts.length) { const S = state.task.pts.map((p) => project(p.p)).filter((q) => q.front); ctx.strokeStyle = '#f97316'; ctx.setLineDash([6, 5]); ctx.lineWidth = 2; ctx.beginPath(); S.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); if (state.task.kind === 'area' && S.length > 2) ctx.closePath(); ctx.stroke(); ctx.setLineDash([]); }
     for (const p of state.points) { const s = project(p.p); if (!s.front) continue; const col = p.quality === 'good' ? '#22c55e' : p.quality === 'fair' ? '#f59e0b' : '#ef4444'; ctx.fillStyle = state.selected.has(p.id) ? '#fff' : col; ctx.beginPath(); ctx.arc(s.x, s.y, state.selected.has(p.id) ? 7 : 5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke(); pill(ctx, s.x + 10, s.y - 10, p.name, col, true); }
   }
   // 진행 중 측정 안내
@@ -689,8 +779,12 @@ function updateMeasureUI() {
   if (e) { $('#est-coords').textContent = fmtCoord(e.p); $('#est-sigma').textContent = `${fmtLen(e.sigma0)} · 잔차 RMS ${Number.isFinite(e.pxRms) ? e.pxRms.toFixed(1) : '∞'} px`; const b = $('#est-quality'); b.className = `badge ${e.quality}`; b.textContent = QUALITY[e.quality].label; }
   const tb = $('#ray-table tbody'); tb.innerHTML = state.rays.map((r, i) => `<tr><td>${i + 1}</td><td class="num">${e && Number.isFinite(e.pxResid[i]) ? e.pxResid[i].toFixed(1) : '–'}</td><td class="muted">${r.note || ''}</td><td>${i === n - 1 ? '<button class="xbtn" data-undo title="이 광선 취소">✕</button>' : ''}</td></tr>`).join('');
   $('#btn-finish').disabled = n < 2; $('#btn-worst').disabled = n < 3; $('#btn-undo').disabled = n < 1; $('#btn-autorot').disabled = n < 1;
+  const t = state.task; const gf = $('#btn-geom-finish'); const need = GEOM_NEED[t.kind];
+  $('#task-pts').innerHTML = t.kind === 'point' ? '' : `선택된 점: ${t.pts.length ? t.pts.map((p) => `<b>${p.name}</b>`).join(' → ') : '(없음)'}${need ? ` · 필요 ${need}개 이상` : ''} <span class="muted">— 이미 잰 점(화면 마커)을 클릭하면 재사용</span>`;
+  gf.hidden = !(t.kind === 'polyline' || t.kind === 'area'); gf.disabled = n > 0 || t.pts.length < (need || 99);
   const step = `${Math.min(n + 1, N)}/${N}`; const lab = taskLabel();
-  if (n === 0) coach(step, `<b>${lab}</b> — 잴 점을 <b>휠로 크게 확대</b>한 뒤 정확히 클릭하세요. (확대창이 커서 옆에 뜹니다)`, '오른쪽 드래그: 이동 · 왼쪽 드래그: 회전');
+  if (n === 0 && (t.kind === 'polyline' || t.kind === 'area') && t.pts.length >= (need || 99)) coach(step, `<b>${lab}</b> — 점을 더 재거나, 충분하면 <b>[✔ 완성]</b>(Enter)을 누르세요. 기존 점 마커를 클릭하면 재사용됩니다.`, `선택 ${t.pts.length}개`);
+  else if (n === 0) coach(step, `<b>${lab}</b> — 잴 점을 <b>휠로 크게 확대</b>한 뒤 정확히 클릭하세요. (확대창이 커서 옆에 뜹니다)${t.kind !== 'point' && state.points.length ? ' 이미 잰 점은 마커 클릭으로 재사용.' : ''}`, '오른쪽 드래그: 이동 · 왼쪽 드래그: 회전');
   else if (state.settings.autoRotate) coach(step, `<b>${lab}</b> — 카메라가 자동으로 돌아갔습니다. 화면 중앙 근처(노란 안내선·청록 원)의 <b>같은 점을 클릭</b>하세요. ${N - n}개 남음 · 다음 회전: <b>${nextAutoLabel(n + 1) || '없음(마지막)'}</b> · 방향 바꾸기: <b>← → ↑ ↓</b> 키`, e ? `σ₀ ${fmtLen(e.sigma0)} · 최대각 ${e.maxAngleDeg.toFixed(0)}°` : `누적 좌우 ${state.autoAngleDeg.toFixed(0)}° · 상하 ${state.autoTiltDeg.toFixed(0)}°`);
   else if (n === 1) coach(step, `<b>${lab}</b> — 카메라를 <b>20° 이상 돌린 뒤</b>(왼쪽 드래그 또는 <b>R</b>) 노란 <b>안내선 위</b>에서 같은 점을 클릭하세요.`, '');
   else coach(step, `<b>${lab}</b> — 또 다른 각도에서 같은 점(청록 원 근처)을 클릭하세요. ${N - n}개 남음 · 지금 확정: <b>Enter</b>`, e ? `σ₀ ${fmtLen(e.sigma0)} · 최대각 ${e.maxAngleDeg.toFixed(0)}°` : '');
@@ -702,7 +796,8 @@ setInterval(tickAngleMeter, 120);
 function renderResults() {
   $('#results-count').textContent = state.points.length;
   const tb = $('#pt-table tbody'); tb.innerHTML = state.points.map((p) => `<tr class="${state.selected.has(p.id) ? 'sel' : ''}"><td><input type="checkbox" data-sel="${p.id}" ${state.selected.has(p.id) ? 'checked' : ''}></td><td><b>${p.name}</b> <span class="badge ${p.quality}" title="${QUALITY[p.quality].desc}">${QUALITY[p.quality].label}</span></td><td class="mono">${fmtCoord(p.p)}</td><td class="num">${fmtLen(p.sigma0)}</td><td class="num">${p.n}</td><td><button class="xbtn" data-del="${p.id}" title="삭제">✕</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">아직 측정한 점이 없습니다.</td></tr>';
-  const db = $('#dist-table tbody'); db.innerHTML = state.dists.map((d, i) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) return ''; const di = distanceInfo(a, b); return `<tr><td>${a.name}–${b.name}</td><td class="num"><b>${fmtLen(di.d)}</b>${state.unit.known ? '' : ' <span title="축척 정보 없음">⚠</span>'}</td><td class="num">${fmtLen(di.sigma, null).replace(/^/, '± ')}</td><td><button class="xbtn" data-ddel="${i}" title="삭제">✕</button></td></tr>`; }).join('') || '<tr><td colspan="4" class="muted">거리 없음 — ↔ 거리 측정 또는 점 2개 체크 후 [선택 두 점 거리]</td></tr>';
+  const db = $('#dist-table tbody'); db.innerHTML = state.dists.map((d, i) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) return ''; const di = distanceDecomp(a, b); return `<tr><td>${a.name}–${b.name}</td><td class="num"><b>${fmtLen(di.d)}</b>${state.unit.known ? '' : ' <span title="축척 정보 없음">⚠</span>'}<br><span class="muted">± ${fmtLen(di.sigma)}</span></td><td class="num">${fmtLen(di.h)}</td><td class="num">${fmtLen(di.v)}</td><td class="num">${di.slopeDeg.toFixed(1)}°<br><span class="muted">${Number.isFinite(di.slopePct) ? di.slopePct.toFixed(1) + ' %' : '수직'}</span></td><td><button class="xbtn" data-ddel="${i}" title="삭제">✕</button></td></tr>`; }).join('') || '<tr><td colspan="6" class="muted">거리 없음 — ↔ 거리 측정 또는 점 2개 체크 후 [선택 두 점 거리]</td></tr>';
+  const gb = $('#geom-table tbody'); gb.innerHTML = state.geoms.map((g, i) => { const gi = geomInfo(g); if (!gi) return ''; return `<tr><td>${GEOM_LABEL[g.type]} <b>${g.name}</b><br><span class="muted">${gi.pts.map((p) => p.name).join('→')}</span></td><td class="num"><b>${gi.text}</b>${!state.unit.known && g.type !== 'angle' ? ' <span title="축척 정보 없음">⚠</span>' : ''}<br><span class="muted">${gi.extra}</span></td><td><button class="xbtn" data-gdel="${i}" title="삭제">✕</button></td></tr>`; }).join('') || '<tr><td colspan="3" class="muted">없음 — 📐 분석 메뉴에서 각도(A)·길이(L)·면적(P)</td></tr>';
   $('#btn-dist-sel').disabled = state.selected.size !== 2;
 }
 function updateCheckDot() {
@@ -847,8 +942,9 @@ function openManualScale() {
 function openExport() {
   if (!state.points.length) { toast('내보낼 측정 결과가 없습니다. 먼저 점을 재세요.', 'warn'); return; }
   openModal(`<h2>내보내기</h2><p class="muted small">단위: ${state.unit.known ? `미터 (${state.unit.source})` : '<b>모델 단위(u)</b> — 축척 정보가 없어 미터 열은 비어 있습니다'}</p><div class="btnrow"><button class="btn primary" id="ex-csv">CSV (점 + 거리)</button><button class="btn" id="ex-json">JSON (공분산·광선 포함)</button><button class="btn" id="ex-png">PNG 스크린샷</button></div>`);
-  $('#ex-csv').onclick = () => { const f = state.unit.known ? state.unit.factor : null; let csv = '﻿type,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs\n'; for (const p of state.points) { const po = origCoord(p.p); const rr = toReal(po); csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ''},${f ? po.y * f : ''},${f ? po.z * f : ''},${f ? p.sigma0 * f : ''},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ''},${rr ? rr.y : ''},${rr ? rr.z : ''},${rr ? state.unit.crs || '' : ''}\n`; } csv += '\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,unit_source\n'; for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const di = distanceInfo(a, b); csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ''},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ''},"${state.unit.known ? state.unit.source : '축척 정보 없음(모델 단위)'}"\n`; } download(`${state.file.name}.measurements.csv`, csv, 'text/csv'); };
-  $('#ex-json').onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $('#up-label').textContent, coord_offset_subtracted_in_viewer: state.coordOffset, points: state.points.map((p) => ({ ...p, p: origCoord(p.p).toArray(), p_viewer: p.p.toArray(), cov: p.cov.toArray() })), distances: state.dists.map((d) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); const di = a && b ? distanceInfo(a, b) : null; return { a: d.a, b: d.b, dist_model: di?.d, sigma_model: di?.sigma }; }), method: 'Deng & Qin 2026 multi-ray least-squares spatial intersection', when: new Date().toISOString() }, null, 2), 'application/json');
+  $('#ex-csv').onclick = () => { const f = state.unit.known ? state.unit.factor : null; let csv = '﻿type,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs\n'; for (const p of state.points) { const po = origCoord(p.p); const rr = toReal(po); csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ''},${f ? po.y * f : ''},${f ? po.z * f : ''},${f ? p.sigma0 * f : ''},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ''},${rr ? rr.y : ''},${rr ? rr.z : ''},${rr ? state.unit.crs || '' : ''}\n`; } csv += '\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,horizontal_m,vertical_m,slope_deg,slope_pct,unit_source\n'; for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const di = distanceDecomp(a, b); csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ''},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ''},${f ? di.h * f : ''},${f ? di.v * f : ''},${di.slopeDeg.toFixed(3)},${Number.isFinite(di.slopePct) ? di.slopePct.toFixed(2) : ''},"${state.unit.known ? state.unit.source : '축척 정보 없음(모델 단위)'}"\n`; }
+    csv += '\ntype,name,points,value,sigma,unit,detail\n'; for (const g of state.geoms) { const gi = geomInfo(g); if (!gi) continue; const unit = g.type === 'angle' ? 'deg' : g.type === 'area' ? (f ? 'm2' : 'u2') : (f ? 'm' : 'u'); const k = g.type === 'angle' ? 1 : g.type === 'area' ? (f ? f * f : 1) : (f || 1); csv += `${g.type},${g.name},${gi.pts.map((p) => p.name).join('>')},${(gi.main * k)},${(gi.sigma * k)},${unit},"${gi.extra}"\n`; } download(`${state.file.name}.measurements.csv`, csv, 'text/csv'); };
+  $('#ex-json').onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $('#up-label').textContent, coord_offset_subtracted_in_viewer: state.coordOffset, points: state.points.map((p) => ({ ...p, p: origCoord(p.p).toArray(), p_viewer: p.p.toArray(), cov: p.cov.toArray() })), geometries: state.geoms.map((g) => { const gi = geomInfo(g); return { ...g, value: gi?.main, sigma: gi?.sigma, text: gi?.text, extra: gi?.extra }; }), distances: state.dists.map((d) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); const di = a && b ? distanceInfo(a, b) : null; return { a: d.a, b: d.b, dist_model: di?.d, sigma_model: di?.sigma }; }), method: 'Deng & Qin 2026 multi-ray least-squares spatial intersection', when: new Date().toISOString() }, null, 2), 'application/json');
   $('#ex-png').onclick = () => { const gl = renderer.domElement; const c = document.createElement('canvas'); c.width = gl.width; c.height = gl.height; const x = c.getContext('2d'); x.drawImage(gl, 0, 0); x.drawImage(overlay, 0, 0, c.width, c.height); c.toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${state.file.name}.measure.png`; a.click(); }); };
 }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); }
@@ -883,10 +979,15 @@ initNavpad();
 $$('#live-rotpat, #set-rotpat').forEach((el) => (el.onchange = (e) => setSetting('rotPattern', e.target.value))); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.onchange = (e) => setSetting('rotAxis', e.target.value))); $$('#live-rotstep, #set-rotstep').forEach((el) => (el.onchange = (e) => setSetting('rotStep', Math.max(0, Math.min(180, +e.target.value || 0))))); $('#set-hires').onchange = (e) => { state.loupeHiResFailed = false; setSetting('loupeHiRes', e.target.checked); }; $('#btn-undo').onclick = undoRay; $('#btn-worst').onclick = removeWorst; $('#btn-finish').onclick = () => finishPoint(); $('#btn-cancel').onclick = () => { if (state.rays.length) { cancelPoint(); toast('현재 점 측정을 취소했습니다.', 'info', 3000); } else endTask(); };
 $('#ray-table').addEventListener('click', (e) => { if (e.target.closest('[data-undo]')) undoRay(); });
 $('#pt-table').addEventListener('change', (e) => { const cb = e.target.closest('[data-sel]'); if (!cb) return; const id = +cb.dataset.sel; if (cb.checked) { if (state.selected.size >= 2) { const first = [...state.selected][0]; state.selected.delete(first); } state.selected.add(id); } else state.selected.delete(id); renderResults(); });
-$('#pt-table').addEventListener('click', (e) => { const d = e.target.closest('[data-del]'); if (!d) return; const id = +d.dataset.del; state.points = state.points.filter((p) => p.id !== id); state.dists = state.dists.filter((x) => x.a !== id && x.b !== id); state.selected.delete(id); renderResults(); });
+$('#pt-table').addEventListener('click', (e) => { const d = e.target.closest('[data-del]'); if (!d) return; const id = +d.dataset.del; state.points = state.points.filter((p) => p.id !== id); state.dists = state.dists.filter((x) => x.a !== id && x.b !== id); state.geoms = state.geoms.filter((g) => !g.ptIds.includes(id)); state.selected.delete(id); renderResults(); });
 $('#dist-table').addEventListener('click', (e) => { const d = e.target.closest('[data-ddel]'); if (!d) return; state.dists.splice(+d.dataset.ddel, 1); renderResults(); });
+$('#geom-table').addEventListener('click', (e) => { const d = e.target.closest('[data-gdel]'); if (!d) return; state.geoms.splice(+d.dataset.gdel, 1); renderResults(); });
+$('#btn-geom-finish').onclick = finishGeometry;
+$('#btn-analyze').onclick = (e) => { e.stopPropagation(); $('#btn-analyze').parentElement.classList.toggle('open'); };
+document.addEventListener('click', () => $('#btn-analyze').parentElement.classList.remove('open'));
+$$('#menu-analyze button').forEach((b) => (b.onclick = () => { const k = b.dataset.an; if (state.task?.kind === k) endTask(); else startTask(k); }));
 $('#btn-dist-sel').onclick = () => { const [a, b] = [...state.selected].map((id) => state.points.find((p) => p.id === id)); if (a && b) { addDistance(a, b); state.selected.clear(); renderResults(); } };
-$('#btn-clear').onclick = () => { if (!state.points.length || confirm('측정한 점과 거리를 모두 지울까요?')) { state.points = []; state.dists = []; state.selected.clear(); renderResults(); } };
+$('#btn-clear').onclick = () => { if (!state.points.length || confirm('측정한 점과 거리를 모두 지울까요?')) { state.points = []; state.dists = []; state.geoms = []; state.selected.clear(); renderResults(); } };
 // 설정 (변경 시 브라우저에 저장, 다음 방문에 복원)
 function saveSettings() { try { state.settings.v = 2; localStorage.setItem('gsm.settings', JSON.stringify(state.settings)); } catch (_) {} }
 function setSetting(key, val) { state.settings[key] = val; syncSettingsUI(); saveSettings(); if (state.task) updateMeasureUI(); }
@@ -917,8 +1018,8 @@ document.addEventListener('pointerdown', (e) => { if (e.target !== renderer?.dom
 document.addEventListener('pointerup', (e) => { if (!down || e.button !== 0) return; const mv = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (mv < 5 && state.task && e.target === renderer.domElement) { const r = renderer.domElement.getBoundingClientRect(); onMeasureClick(e.clientX - r.left, e.clientY - r.top); } });
 document.addEventListener('pointermove', (e) => { if (!renderer) return; const r = renderer.domElement.getBoundingClientRect(); state.mouse.x = e.clientX - r.left; state.mouse.y = e.clientY - r.top; state.mouse.inside = e.target === renderer.domElement; });
 // 키
-document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (e.key === 'Enter') finishPoint(); else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(5, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
-function resetAll(keepFile) { state.points = []; state.dists = []; state.selected.clear(); state.nextId = 1; state.task = null; cancelPoint(false); $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active')); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; renderResults(); }
+document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (k === 'a' && !e.ctrlKey && !e.metaKey) $$('#menu-analyze button')[0].click(); else if (k === 'l') $$('#menu-analyze button')[1].click(); else if (k === 'p') $$('#menu-analyze button')[2].click(); else if (e.key === 'Enter') { if (state.task && GEOM_NEED[state.task.kind] && state.rays.length === 0) finishGeometry(); else finishPoint(); } else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(5, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
+function resetAll(keepFile) { state.points = []; state.dists = []; state.geoms = []; state.selected.clear(); state.nextId = 1; state.task = null; cancelPoint(false); $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active')); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; renderResults(); }
 function runTour() { document.getElementById('app').classList.add('tour-active'); startTour(TOUR_STEPS, { onDone: () => { document.getElementById('app').classList.remove('tour-active'); try { localStorage.setItem('gsm.tourSeen', '1'); } catch (_) {} } }); }
 
 // ------------------------------------------------------------------ 시작
@@ -936,7 +1037,7 @@ window.__app = {
   setCamera(pos, target, up) { if (up) camera.up.set(...up); camera.position.set(...pos); controls.target.set(...target); controls.update(); renderer.render(scene, camera); },
   project(p) { return project(new THREE.Vector3(...p)); },
   click(px, py) { onMeasureClick(px, py); },
-  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, navAction, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
+  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, navAction, geomInfo, addGeom, distanceDecomp, finishGeometry, taskPointAdded, propagate, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
   debugAddPoint(xyz, name) { const p = { id: state.nextId++, name: name || `P${state.nextId - 1}`, p: new THREE.Vector3(...xyz), sigma0: 1e-4, cov: new THREE.Matrix3().identity().multiplyScalar(1e-8), n: 5, quality: 'good', pxRms: 0.1, maxAngleDeg: 60, rays: [] }; state.points.push(p); renderResults(); return p; },
   openGcpCalib, setGcp(name, xyz) { state.gcpInputs[name] = { x: xyz[0], y: xyz[1], z: xyz[2] }; }, openChecklist, openCalibWizard, applyManualScale(s) { state.unit = { known: true, factor: s, sigmaRel: 0, source: 'test' }; applyUnitUI(); },
   distanceInfo, intersectRays, render() { renderer.render(scene, camera); drawOverlay(); },

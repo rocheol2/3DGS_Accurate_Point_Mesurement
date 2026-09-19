@@ -29486,12 +29486,12 @@
     return a.distance - b.distance;
   }
   function intersect(object, raycaster2, intersects2, recursive) {
-    let propagate = true;
+    let propagate2 = true;
     if (object.layers.test(raycaster2.layers)) {
       const result = object.raycast(raycaster2, intersects2);
-      if (result === false) propagate = false;
+      if (result === false) propagate2 = false;
     }
-    if (propagate === true && recursive === true) {
+    if (propagate2 === true && recursive === true) {
       const children = object.children;
       for (let i = 0, l = children.length; i < l; i++) {
         intersect(children[i], raycaster2, intersects2, true);
@@ -56870,8 +56870,10 @@ void main() {
     autoRotCount: 0,
     points: [],
     dists: [],
+    geoms: [],
     selected: /* @__PURE__ */ new Set(),
     nextId: 1,
+    nextGeomId: 1,
     settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, dunit: "auto", labels: true },
     autoPivot: null,
     autoAngleDeg: 0,
@@ -57378,6 +57380,220 @@ void main() {
     const quality = pxRms <= 1.5 && maxAngleDeg >= 20 ? "good" : pxRms <= 4 && maxAngleDeg >= 10 ? "fair" : "poor";
     return { p, sigma0, cov, residuals, pxResid, pxRms, maxAngleDeg, n, quality };
   }
+  function upVec() {
+    return camera.up.clone().normalize();
+  }
+  function jacobiSym(A) {
+    const n = A.length;
+    const a = A.map((r) => r.slice());
+    const v = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_2, j) => i === j ? 1 : 0));
+    for (let sweep = 0; sweep < 80; sweep++) {
+      let off = 0;
+      for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += a[p][q] * a[p][q];
+      if (off < 1e-30) break;
+      for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+        if (Math.abs(a[p][q]) < 1e-300) continue;
+        const th = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+        const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+        const c = 1 / Math.sqrt(t * t + 1), s2 = t * c;
+        for (let k = 0; k < n; k++) {
+          const akp = a[k][p], akq = a[k][q];
+          a[k][p] = c * akp - s2 * akq;
+          a[k][q] = s2 * akp + c * akq;
+        }
+        for (let k = 0; k < n; k++) {
+          const apk = a[p][k], aqk = a[q][k];
+          a[p][k] = c * apk - s2 * aqk;
+          a[q][k] = s2 * apk + c * aqk;
+        }
+        for (let k = 0; k < n; k++) {
+          const vkp = v[k][p], vkq = v[k][q];
+          v[k][p] = c * vkp - s2 * vkq;
+          v[k][q] = s2 * vkp + c * vkq;
+        }
+      }
+    }
+    return { vals: a.map((r, i) => r[i]), vecs: Array.from({ length: n }, (_, k) => v.map((row) => row[k])) };
+  }
+  function propagate(fn, pts) {
+    const x = pts.flatMap((p) => [p.p.x, p.p.y, p.p.z]);
+    const v0 = fn(x);
+    const h = 1e-6 * Math.max(1, state.bounds?.radius || 1);
+    let variance = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const J = [0, 0, 0];
+      for (let k = 0; k < 3; k++) {
+        const xp = x.slice(), xm = x.slice();
+        xp[3 * i + k] += h;
+        xm[3 * i + k] -= h;
+        J[k] = (fn(xp) - fn(xm)) / (2 * h);
+      }
+      const c = pts[i].cov.elements;
+      variance += J[0] * (c[0] * J[0] + c[3] * J[1] + c[6] * J[2]) + J[1] * (c[1] * J[0] + c[4] * J[1] + c[7] * J[2]) + J[2] * (c[2] * J[0] + c[5] * J[1] + c[8] * J[2]);
+    }
+    return { v: v0, sigma: Math.sqrt(Math.max(0, variance)) };
+  }
+  var V3 = (x, i) => new Vector3(x[3 * i], x[3 * i + 1], x[3 * i + 2]);
+  function fnAngleDeg(x) {
+    const u = V3(x, 0).sub(V3(x, 1)), w = V3(x, 2).sub(V3(x, 1));
+    const d = u.dot(w) / (u.length() * w.length() || 1e-12);
+    return Math.acos(MathUtils.clamp(d, -1, 1)) / DEG;
+  }
+  function fnPolyLen(closed) {
+    return (x) => {
+      const n = x.length / 3;
+      let L = 0;
+      for (let i = 0; i + 1 < n; i++) L += V3(x, i).distanceTo(V3(x, i + 1));
+      if (closed && n > 2) L += V3(x, n - 1).distanceTo(V3(x, 0));
+      return L;
+    };
+  }
+  function planeFit(P) {
+    const c = new Vector3();
+    P.forEach((p) => c.add(p));
+    c.divideScalar(P.length);
+    const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (const p of P) {
+      const d = [p.x - c.x, p.y - c.y, p.z - c.z];
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) M[i][j] += d[i] * d[j];
+    }
+    const { vals, vecs } = jacobiSym(M);
+    const order = [0, 1, 2].sort((a, b) => vals[a] - vals[b]);
+    const n = new Vector3(...vecs[order[0]]).normalize(), e1 = new Vector3(...vecs[order[2]]).normalize();
+    const e2 = new Vector3().crossVectors(n, e1).normalize();
+    let ss = 0;
+    for (const p of P) {
+      const r = p.clone().sub(c).dot(n);
+      ss += r * r;
+    }
+    return { c, n, e1, e2, rms: Math.sqrt(ss / P.length) };
+  }
+  function shoelace(pts2) {
+    let a = 0;
+    for (let i = 0; i < pts2.length; i++) {
+      const p = pts2[i], q = pts2[(i + 1) % pts2.length];
+      a += p[0] * q[1] - q[0] * p[1];
+    }
+    return Math.abs(a) / 2;
+  }
+  function fnArea(x) {
+    const n = x.length / 3;
+    const P = Array.from({ length: n }, (_, i) => V3(x, i));
+    const pf = planeFit(P);
+    return shoelace(P.map((p) => {
+      const d = p.clone().sub(pf.c);
+      return [d.dot(pf.e1), d.dot(pf.e2)];
+    }));
+  }
+  function fnAreaHoriz(x) {
+    const n = x.length / 3;
+    const up = upVec();
+    let h = new Vector3(1, 0, 0);
+    if (Math.abs(h.dot(up)) > 0.9) h.set(0, 1, 0);
+    h.projectOnPlane(up).normalize();
+    const h2 = new Vector3().crossVectors(up, h);
+    return shoelace(Array.from({ length: n }, (_, i) => {
+      const p = V3(x, i);
+      return [p.dot(h), p.dot(h2)];
+    }));
+  }
+  function distanceDecomp(a, b) {
+    const up = upVec();
+    const di = distanceInfo(a, b);
+    const fh = (x) => {
+      const d = V3(x, 1).sub(V3(x, 0));
+      return d.clone().sub(up.clone().multiplyScalar(d.dot(up))).length();
+    };
+    const fv = (x) => V3(x, 1).sub(V3(x, 0)).dot(up);
+    const H = propagate(fh, [a, b]), V = propagate(fv, [a, b]);
+    const slopeDeg = Math.atan2(Math.abs(V.v), H.v) / DEG, slopePct = H.v > 1e-9 ? Math.abs(V.v) / H.v * 100 : Infinity;
+    return { ...di, h: H.v, sigmaH: H.sigma, v: V.v, sigmaV: V.sigma, slopeDeg, slopePct };
+  }
+  function geomInfo(g) {
+    const pts = g.ptIds.map((id) => state.points.find((p) => p.id === id));
+    if (pts.some((p) => !p)) return null;
+    if (g.type === "angle") {
+      const r = propagate(fnAngleDeg, pts);
+      return { pts, main: r.v, sigma: r.sigma, text: `${r.v.toFixed(2)}\xB0 \xB1 ${r.sigma.toFixed(2)}\xB0`, extra: `\uAF2D\uC9D3\uC810 ${pts[1].name}` };
+    }
+    if (g.type === "polyline") {
+      const r = propagate(fnPolyLen(false), pts);
+      return { pts, main: r.v, sigma: r.sigma, text: fmtLen(r.v, r.sigma, true), extra: `${pts.length}\uC810 \xB7 \uAD6C\uAC04 ${pts.length - 1}` };
+    }
+    if (g.type === "area") {
+      const A = propagate(fnArea, pts), Ah = propagate(fnAreaHoriz, pts), per = propagate(fnPolyLen(true), pts);
+      const pf = planeFit(pts.map((p) => p.p));
+      let tilt = Math.acos(MathUtils.clamp(Math.abs(pf.n.dot(upVec())), 0, 1)) / DEG;
+      return { pts, main: A.v, sigma: A.sigma, text: fmtArea(A.v, A.sigma), extra: `\uC218\uD3C9\uD22C\uC601 ${fmtArea(Ah.v)} \xB7 \uB458\uB808 ${fmtLen(per.v, per.sigma, true)} \xB7 \uBA74 \uAE30\uC6B8\uAE30 ${tilt.toFixed(1)}\xB0 \xB7 \uD3C9\uBA74 \uC794\uCC28 RMS ${fmtLen(pf.rms)}`, tilt, per: per.v, ah: Ah.v, rms: pf.rms };
+    }
+    return null;
+  }
+  function fmtArea(aModel, sig = null) {
+    if (!state.unit.known) return `${aModel.toFixed(4)} u\xB2${sig != null ? ` \xB1 ${sig.toFixed(4)}` : ""}`;
+    const f2 = state.unit.factor * state.unit.factor;
+    let a = aModel * f2, sg = sig != null ? Math.sqrt((sig * f2) ** 2 + (2 * a * state.unit.sigmaRel) ** 2) : null;
+    const cm = a < 1;
+    const k = cm ? 1e4 : 1, dec = cm ? 1 : 3;
+    return `${(a * k).toFixed(dec)}${sg != null ? ` \xB1 ${(sg * k).toFixed(dec)}` : ""} ${cm ? "cm\xB2" : "m\xB2"}`;
+  }
+  var GEOM_NEED = { angle: 3, polyline: 2, area: 3 };
+  var GEOM_LABEL = { angle: "\u2220 \uAC01\uB3C4", polyline: "\u2312 \uAE38\uC774", area: "\u25B1 \uBA74\uC801" };
+  function addGeom(type, pts) {
+    const g = { id: state.nextGeomId++, type, name: `${type === "angle" ? "A" : type === "polyline" ? "L" : "S"}${state.nextGeomId - 1}`, ptIds: pts.map((p) => p.id) };
+    state.geoms.push(g);
+    const gi = geomInfo(g);
+    toast(`<b>${GEOM_LABEL[type]} ${g.name}</b> = <span style="font-size:17px">${gi.text}</span><br><span class="muted small">${gi.extra}</span>${state.unit.known || type === "angle" ? "" : ' <span class="muted">(\uBAA8\uB378 \uB2E8\uC704 \u2014 \uCD95\uCC99 \uBCF4\uC815 \uD544\uC694)</span>'}`, "good", 9e3);
+    renderResults();
+    return g;
+  }
+  function finishGeometry() {
+    const t = state.task;
+    if (!t || !GEOM_NEED[t.kind]) return;
+    if (state.rays.length) {
+      toast("\uBA3C\uC800 \uC9C4\uD589 \uC911\uC778 \uC810\uC744 \uD655\uC815(Enter)\uD558\uAC70\uB098 \uCDE8\uC18C(Esc)\uD558\uC138\uC694.", "warn", 3e3);
+      return;
+    }
+    if (t.pts.length < GEOM_NEED[t.kind]) {
+      toast(`${GEOM_LABEL[t.kind]}\uC5D0\uB294 \uC810\uC774 ${GEOM_NEED[t.kind]}\uAC1C \uC774\uC0C1 \uD544\uC694\uD569\uB2C8\uB2E4 (\uD604\uC7AC ${t.pts.length}\uAC1C).`, "warn", 3500);
+      return;
+    }
+    addGeom(t.kind, t.pts);
+    endTask();
+  }
+  function taskPointAdded(t) {
+    if (t.kind === "point") {
+      updateMeasureUI();
+    } else if (t.kind === "distance") {
+      if (t.pts.length === 2) {
+        addDistance(t.pts[0], t.pts[1]);
+        endTask();
+      } else updateMeasureUI();
+    } else if (t.kind === "calib") {
+      if (t.pts.length === 2) {
+        const di = distanceInfo(t.pts[0], t.pts[1]);
+        endTask();
+        openCalibResult(t, di);
+      } else updateMeasureUI();
+    } else if (t.kind === "angle") {
+      if (t.pts.length === 3) {
+        addGeom("angle", t.pts);
+        endTask();
+      } else updateMeasureUI();
+    } else updateMeasureUI();
+  }
+  function pickExistingPoint(px2, py2) {
+    let best = null, bd = 14;
+    for (const p of state.points) {
+      const s = project(p.p);
+      if (!s.front) continue;
+      const d = Math.hypot(s.x - px2, s.y - py2);
+      if (d < bd) {
+        bd = d;
+        best = p;
+      }
+    }
+    return best;
+  }
   function distanceInfo(a, b) {
     const v = b.p.clone().sub(a.p);
     const d = v.length();
@@ -57693,7 +57909,7 @@ void main() {
     resolveUnits(header, sidecar);
     $("#loading").hidden = true;
     $("#dropzone").classList.add("hidden");
-    ["#btn-point", "#btn-dist", "#btn-scale", "#btn-export", "#btn-up", "#btn-home", "#btn-navpad"].forEach((s) => $(s).disabled = false);
+    ["#btn-point", "#btn-dist", "#btn-scale", "#btn-export", "#btn-up", "#btn-home", "#btn-navpad", "#btn-analyze"].forEach((s) => $(s).disabled = false);
     $("#navpad").hidden = !state.settings.navpad;
     glHost.classList.remove("measuring");
     coach("", `<b>${main.name}</b> \uC5F4\uB9BC (\uAC00\uC6B0\uC2DC\uC548 ${state.file.count ? state.file.count.toLocaleString() : "?"}\uAC1C). <b>\u25CF \uC810 \uCE21\uC815</b> \uB610\uB294 <b>\u2194 \uAC70\uB9AC \uCE21\uC815</b>\uC744 \uB204\uB974\uACE0, \uD720\uB85C \uC7B4 \uACF3\uC744 \uD655\uB300\uD558\uC138\uC694.`);
@@ -57748,6 +57964,7 @@ void main() {
     $$("#btn-point,#btn-dist").forEach((b) => b.classList.remove("active"));
     if (kind === "point") $("#btn-point").classList.add("active");
     if (kind === "distance") $("#btn-dist").classList.add("active");
+    $("#btn-analyze").classList.toggle("active", !!GEOM_NEED[kind]);
     glHost.classList.add("measuring");
     showTab("measure");
     $("#measure-idle").hidden = true;
@@ -57760,12 +57977,15 @@ void main() {
     if (t.kind === "point") return `\uC810 \uCE21\uC815 (P${state.nextId})`;
     if (t.kind === "distance") return `\uAC70\uB9AC \uCE21\uC815 \u2014 ${t.pts.length === 0 ? "A\uC810" : "B\uC810"}`;
     if (t.kind === "calib") return `\uCD95\uCC99 \uBCF4\uC815 \u2014 ${t.pts.length === 0 ? "\uAE30\uC900 \uAD6C\uAC04 A\uC810" : "\uAE30\uC900 \uAD6C\uAC04 B\uC810"}`;
+    if (t.kind === "angle") return `\uAC01\uB3C4 \uCE21\uC815 \u2014 ${["A\uC810(\uD55C\uCABD \uB05D)", "B\uC810(\uAF2D\uC9D3\uC810)", "C\uC810(\uB2E4\uB978 \uB05D)"][t.pts.length] || ""}`;
+    if (t.kind === "polyline") return `\uAE38\uC774 \uCE21\uC815 \u2014 ${t.pts.length + 1}\uBC88\uC9F8 \uC810 (2\uAC1C \uC774\uC0C1 \u2192 \uC644\uC131)`;
+    if (t.kind === "area") return `\uBA74\uC801 \uCE21\uC815 \u2014 ${t.pts.length + 1}\uBC88\uC9F8 \uAF2D\uC9D3\uC810 (3\uAC1C \uC774\uC0C1, \uC21C\uC11C\uB300\uB85C \u2192 \uC644\uC131)`;
     return "";
   }
   function endTask() {
     state.task = null;
     cancelPoint(false);
-    $$("#btn-point,#btn-dist").forEach((b) => b.classList.remove("active"));
+    $$("#btn-point,#btn-dist,#btn-analyze").forEach((b) => b.classList.remove("active"));
     glHost.classList.remove("measuring");
     $("#measure-idle").hidden = false;
     $("#measure-live").hidden = true;
@@ -57784,6 +58004,21 @@ void main() {
     if (anims.length) {
       toast("\uCE74\uBA54\uB77C \uD68C\uC804 \uC911\uC785\uB2C8\uB2E4. \uBA48\uCD98 \uB4A4 \uD074\uB9AD\uD558\uC138\uC694.", "info", 1500);
       return;
+    }
+    if (state.rays.length === 0 && state.task.kind !== "point") {
+      const ex = pickExistingPoint(px2, py2);
+      if (ex) {
+        const t = state.task;
+        if (t.pts.includes(ex) && t.kind !== "polyline") {
+          toast(`${ex.name} \uC740 \uC774\uBBF8 \uC120\uD0DD\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.`, "warn", 2500);
+          return;
+        }
+        t.pts.push(ex);
+        toast(`\uAE30\uC874 \uC810 <b>${ex.name}</b> \uC0AC\uC6A9`, "info", 2500);
+        taskPointAdded(t);
+        renderResults();
+        return;
+      }
     }
     let pt = { x: px2, y: py2 };
     let note = "";
@@ -57860,20 +58095,7 @@ void main() {
     t.pts.push(pt);
     toast(`<b>${pt.name} \uD655\uC815</b> ${fmtCoord(pt.p)} \xB7 \u03C3\u2080 ${fmtLen(pt.sigma0)} \xB7 \uD488\uC9C8 <span class="badge ${pt.quality}">${QUALITY[pt.quality].label}</span>`, pt.quality === "poor" ? "warn" : "good", 6e3);
     cancelPoint(false);
-    if (t.kind === "point") {
-      updateMeasureUI();
-    } else if (t.kind === "distance") {
-      if (t.pts.length === 2) {
-        addDistance(t.pts[0], t.pts[1]);
-        endTask();
-      } else updateMeasureUI();
-    } else if (t.kind === "calib") {
-      if (t.pts.length === 2) {
-        const di = distanceInfo(t.pts[0], t.pts[1]);
-        endTask();
-        openCalibResult(t, di);
-      } else updateMeasureUI();
-    }
+    taskPointAdded(t);
     renderResults();
     updateCheckDot();
   }
@@ -58123,6 +58345,61 @@ void main() {
         const di = distanceInfo(a, b);
         pill(ctx, (pa.x + pb.x) / 2, (pa.y + pb.y) / 2 - 14, `${a.name}\u2013${b.name}  ${fmtLen(di.d, di.sigma, true)}${state.unit.known ? "" : " \u26A0"}`, "#22d3ee");
       }
+      for (const g of state.geoms) {
+        const gi = geomInfo(g);
+        if (!gi) continue;
+        const S = gi.pts.map((p) => project(p.p));
+        if (S.some((q) => !q.front)) continue;
+        if (g.type === "area") {
+          ctx.fillStyle = "#f9731633";
+          ctx.strokeStyle = "#f97316";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          S.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y));
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          const cx = S.reduce((a, q) => a + q.x, 0) / S.length, cy = S.reduce((a, q) => a + q.y, 0) / S.length;
+          pill(ctx, cx, cy, `${g.name} ${gi.text}`, "#f97316");
+        } else if (g.type === "polyline") {
+          ctx.strokeStyle = "#f97316";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          S.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y));
+          ctx.stroke();
+          const m = S[Math.floor(S.length / 2)];
+          pill(ctx, m.x + 8, m.y - 12, `${g.name} ${gi.text}`, "#f97316");
+        } else if (g.type === "angle") {
+          const [A, B, C] = S;
+          ctx.strokeStyle = "#a78bfa";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(A.x, A.y);
+          ctx.lineTo(B.x, B.y);
+          ctx.lineTo(C.x, C.y);
+          ctx.stroke();
+          const a1 = Math.atan2(A.y - B.y, A.x - B.x), a2 = Math.atan2(C.y - B.y, C.x - B.x);
+          let d = a2 - a1;
+          while (d > Math.PI) d -= 2 * Math.PI;
+          while (d < -Math.PI) d += 2 * Math.PI;
+          ctx.beginPath();
+          ctx.arc(B.x, B.y, 26, a1, a1 + d, d < 0);
+          ctx.stroke();
+          const mid = a1 + d / 2;
+          pill(ctx, B.x + 34 * Math.cos(mid), B.y + 34 * Math.sin(mid), `${g.name} ${gi.text}`, "#a78bfa");
+        }
+      }
+      if (state.task && GEOM_NEED[state.task.kind] && state.task.pts.length) {
+        const S = state.task.pts.map((p) => project(p.p)).filter((q) => q.front);
+        ctx.strokeStyle = "#f97316";
+        ctx.setLineDash([6, 5]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        S.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y));
+        if (state.task.kind === "area" && S.length > 2) ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       for (const p of state.points) {
         const s = project(p.p);
         if (!s.front) continue;
@@ -58244,9 +58521,16 @@ void main() {
     $("#btn-worst").disabled = n < 3;
     $("#btn-undo").disabled = n < 1;
     $("#btn-autorot").disabled = n < 1;
+    const t = state.task;
+    const gf = $("#btn-geom-finish");
+    const need = GEOM_NEED[t.kind];
+    $("#task-pts").innerHTML = t.kind === "point" ? "" : `\uC120\uD0DD\uB41C \uC810: ${t.pts.length ? t.pts.map((p) => `<b>${p.name}</b>`).join(" \u2192 ") : "(\uC5C6\uC74C)"}${need ? ` \xB7 \uD544\uC694 ${need}\uAC1C \uC774\uC0C1` : ""} <span class="muted">\u2014 \uC774\uBBF8 \uC7B0 \uC810(\uD654\uBA74 \uB9C8\uCEE4)\uC744 \uD074\uB9AD\uD558\uBA74 \uC7AC\uC0AC\uC6A9</span>`;
+    gf.hidden = !(t.kind === "polyline" || t.kind === "area");
+    gf.disabled = n > 0 || t.pts.length < (need || 99);
     const step = `${Math.min(n + 1, N)}/${N}`;
     const lab = taskLabel();
-    if (n === 0) coach(step, `<b>${lab}</b> \u2014 \uC7B4 \uC810\uC744 <b>\uD720\uB85C \uD06C\uAC8C \uD655\uB300</b>\uD55C \uB4A4 \uC815\uD655\uD788 \uD074\uB9AD\uD558\uC138\uC694. (\uD655\uB300\uCC3D\uC774 \uCEE4\uC11C \uC606\uC5D0 \uB739\uB2C8\uB2E4)`, "\uC624\uB978\uCABD \uB4DC\uB798\uADF8: \uC774\uB3D9 \xB7 \uC67C\uCABD \uB4DC\uB798\uADF8: \uD68C\uC804");
+    if (n === 0 && (t.kind === "polyline" || t.kind === "area") && t.pts.length >= (need || 99)) coach(step, `<b>${lab}</b> \u2014 \uC810\uC744 \uB354 \uC7AC\uAC70\uB098, \uCDA9\uBD84\uD558\uBA74 <b>[\u2714 \uC644\uC131]</b>(Enter)\uC744 \uB204\uB974\uC138\uC694. \uAE30\uC874 \uC810 \uB9C8\uCEE4\uB97C \uD074\uB9AD\uD558\uBA74 \uC7AC\uC0AC\uC6A9\uB429\uB2C8\uB2E4.`, `\uC120\uD0DD ${t.pts.length}\uAC1C`);
+    else if (n === 0) coach(step, `<b>${lab}</b> \u2014 \uC7B4 \uC810\uC744 <b>\uD720\uB85C \uD06C\uAC8C \uD655\uB300</b>\uD55C \uB4A4 \uC815\uD655\uD788 \uD074\uB9AD\uD558\uC138\uC694. (\uD655\uB300\uCC3D\uC774 \uCEE4\uC11C \uC606\uC5D0 \uB739\uB2C8\uB2E4)${t.kind !== "point" && state.points.length ? " \uC774\uBBF8 \uC7B0 \uC810\uC740 \uB9C8\uCEE4 \uD074\uB9AD\uC73C\uB85C \uC7AC\uC0AC\uC6A9." : ""}`, "\uC624\uB978\uCABD \uB4DC\uB798\uADF8: \uC774\uB3D9 \xB7 \uC67C\uCABD \uB4DC\uB798\uADF8: \uD68C\uC804");
     else if (state.settings.autoRotate) coach(step, `<b>${lab}</b> \u2014 \uCE74\uBA54\uB77C\uAC00 \uC790\uB3D9\uC73C\uB85C \uB3CC\uC544\uAC14\uC2B5\uB2C8\uB2E4. \uD654\uBA74 \uC911\uC559 \uADFC\uCC98(\uB178\uB780 \uC548\uB0B4\uC120\xB7\uCCAD\uB85D \uC6D0)\uC758 <b>\uAC19\uC740 \uC810\uC744 \uD074\uB9AD</b>\uD558\uC138\uC694. ${N - n}\uAC1C \uB0A8\uC74C \xB7 \uB2E4\uC74C \uD68C\uC804: <b>${nextAutoLabel(n + 1) || "\uC5C6\uC74C(\uB9C8\uC9C0\uB9C9)"}</b> \xB7 \uBC29\uD5A5 \uBC14\uAFB8\uAE30: <b>\u2190 \u2192 \u2191 \u2193</b> \uD0A4`, e ? `\u03C3\u2080 ${fmtLen(e.sigma0)} \xB7 \uCD5C\uB300\uAC01 ${e.maxAngleDeg.toFixed(0)}\xB0` : `\uB204\uC801 \uC88C\uC6B0 ${state.autoAngleDeg.toFixed(0)}\xB0 \xB7 \uC0C1\uD558 ${state.autoTiltDeg.toFixed(0)}\xB0`);
     else if (n === 1) coach(step, `<b>${lab}</b> \u2014 \uCE74\uBA54\uB77C\uB97C <b>20\xB0 \uC774\uC0C1 \uB3CC\uB9B0 \uB4A4</b>(\uC67C\uCABD \uB4DC\uB798\uADF8 \uB610\uB294 <b>R</b>) \uB178\uB780 <b>\uC548\uB0B4\uC120 \uC704</b>\uC5D0\uC11C \uAC19\uC740 \uC810\uC744 \uD074\uB9AD\uD558\uC138\uC694.`, "");
     else coach(step, `<b>${lab}</b> \u2014 \uB610 \uB2E4\uB978 \uAC01\uB3C4\uC5D0\uC11C \uAC19\uC740 \uC810(\uCCAD\uB85D \uC6D0 \uADFC\uCC98)\uC744 \uD074\uB9AD\uD558\uC138\uC694. ${N - n}\uAC1C \uB0A8\uC74C \xB7 \uC9C0\uAE08 \uD655\uC815: <b>Enter</b>`, e ? `\u03C3\u2080 ${fmtLen(e.sigma0)} \xB7 \uCD5C\uB300\uAC01 ${e.maxAngleDeg.toFixed(0)}\xB0` : "");
@@ -58268,9 +58552,15 @@ void main() {
     db.innerHTML = state.dists.map((d, i) => {
       const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b);
       if (!a || !b) return "";
-      const di = distanceInfo(a, b);
-      return `<tr><td>${a.name}\u2013${b.name}</td><td class="num"><b>${fmtLen(di.d)}</b>${state.unit.known ? "" : ' <span title="\uCD95\uCC99 \uC815\uBCF4 \uC5C6\uC74C">\u26A0</span>'}</td><td class="num">${fmtLen(di.sigma, null).replace(/^/, "\xB1 ")}</td><td><button class="xbtn" data-ddel="${i}" title="\uC0AD\uC81C">\u2715</button></td></tr>`;
-    }).join("") || '<tr><td colspan="4" class="muted">\uAC70\uB9AC \uC5C6\uC74C \u2014 \u2194 \uAC70\uB9AC \uCE21\uC815 \uB610\uB294 \uC810 2\uAC1C \uCCB4\uD06C \uD6C4 [\uC120\uD0DD \uB450 \uC810 \uAC70\uB9AC]</td></tr>';
+      const di = distanceDecomp(a, b);
+      return `<tr><td>${a.name}\u2013${b.name}</td><td class="num"><b>${fmtLen(di.d)}</b>${state.unit.known ? "" : ' <span title="\uCD95\uCC99 \uC815\uBCF4 \uC5C6\uC74C">\u26A0</span>'}<br><span class="muted">\xB1 ${fmtLen(di.sigma)}</span></td><td class="num">${fmtLen(di.h)}</td><td class="num">${fmtLen(di.v)}</td><td class="num">${di.slopeDeg.toFixed(1)}\xB0<br><span class="muted">${Number.isFinite(di.slopePct) ? di.slopePct.toFixed(1) + " %" : "\uC218\uC9C1"}</span></td><td><button class="xbtn" data-ddel="${i}" title="\uC0AD\uC81C">\u2715</button></td></tr>`;
+    }).join("") || '<tr><td colspan="6" class="muted">\uAC70\uB9AC \uC5C6\uC74C \u2014 \u2194 \uAC70\uB9AC \uCE21\uC815 \uB610\uB294 \uC810 2\uAC1C \uCCB4\uD06C \uD6C4 [\uC120\uD0DD \uB450 \uC810 \uAC70\uB9AC]</td></tr>';
+    const gb = $("#geom-table tbody");
+    gb.innerHTML = state.geoms.map((g, i) => {
+      const gi = geomInfo(g);
+      if (!gi) return "";
+      return `<tr><td>${GEOM_LABEL[g.type]} <b>${g.name}</b><br><span class="muted">${gi.pts.map((p) => p.name).join("\u2192")}</span></td><td class="num"><b>${gi.text}</b>${!state.unit.known && g.type !== "angle" ? ' <span title="\uCD95\uCC99 \uC815\uBCF4 \uC5C6\uC74C">\u26A0</span>' : ""}<br><span class="muted">${gi.extra}</span></td><td><button class="xbtn" data-gdel="${i}" title="\uC0AD\uC81C">\u2715</button></td></tr>`;
+    }).join("") || '<tr><td colspan="3" class="muted">\uC5C6\uC74C \u2014 \u{1F4D0} \uBD84\uC11D \uBA54\uB274\uC5D0\uC11C \uAC01\uB3C4(A)\xB7\uAE38\uC774(L)\xB7\uBA74\uC801(P)</td></tr>';
     $("#btn-dist-sel").disabled = state.selected.size !== 2;
   }
   function updateCheckDot() {
@@ -58602,17 +58892,29 @@ void main() {
         csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ""},${f ? po.y * f : ""},${f ? po.z * f : ""},${f ? p.sigma0 * f : ""},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ""},${rr ? rr.y : ""},${rr ? rr.z : ""},${rr ? state.unit.crs || "" : ""}
 `;
       }
-      csv += "\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,unit_source\n";
+      csv += "\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,horizontal_m,vertical_m,slope_deg,slope_pct,unit_source\n";
       for (const d of state.dists) {
         const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b);
         if (!a || !b) continue;
-        const di = distanceInfo(a, b);
-        csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ""},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ""},"${state.unit.known ? state.unit.source : "\uCD95\uCC99 \uC815\uBCF4 \uC5C6\uC74C(\uBAA8\uB378 \uB2E8\uC704)"}"
+        const di = distanceDecomp(a, b);
+        csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ""},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ""},${f ? di.h * f : ""},${f ? di.v * f : ""},${di.slopeDeg.toFixed(3)},${Number.isFinite(di.slopePct) ? di.slopePct.toFixed(2) : ""},"${state.unit.known ? state.unit.source : "\uCD95\uCC99 \uC815\uBCF4 \uC5C6\uC74C(\uBAA8\uB378 \uB2E8\uC704)"}"
+`;
+      }
+      csv += "\ntype,name,points,value,sigma,unit,detail\n";
+      for (const g of state.geoms) {
+        const gi = geomInfo(g);
+        if (!gi) continue;
+        const unit = g.type === "angle" ? "deg" : g.type === "area" ? f ? "m2" : "u2" : f ? "m" : "u";
+        const k = g.type === "angle" ? 1 : g.type === "area" ? f ? f * f : 1 : f || 1;
+        csv += `${g.type},${g.name},${gi.pts.map((p) => p.name).join(">")},${gi.main * k},${gi.sigma * k},${unit},"${gi.extra}"
 `;
       }
       download(`${state.file.name}.measurements.csv`, csv, "text/csv");
     };
-    $("#ex-json").onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $("#up-label").textContent, coord_offset_subtracted_in_viewer: state.coordOffset, points: state.points.map((p) => ({ ...p, p: origCoord(p.p).toArray(), p_viewer: p.p.toArray(), cov: p.cov.toArray() })), distances: state.dists.map((d) => {
+    $("#ex-json").onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $("#up-label").textContent, coord_offset_subtracted_in_viewer: state.coordOffset, points: state.points.map((p) => ({ ...p, p: origCoord(p.p).toArray(), p_viewer: p.p.toArray(), cov: p.cov.toArray() })), geometries: state.geoms.map((g) => {
+      const gi = geomInfo(g);
+      return { ...g, value: gi?.main, sigma: gi?.sigma, text: gi?.text, extra: gi?.extra };
+    }), distances: state.dists.map((d) => {
       const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b);
       const di = a && b ? distanceInfo(a, b) : null;
       return { a: d.a, b: d.b, dist_model: di?.d, sigma_model: di?.sigma };
@@ -58735,6 +59037,7 @@ void main() {
     const id = +d.dataset.del;
     state.points = state.points.filter((p) => p.id !== id);
     state.dists = state.dists.filter((x) => x.a !== id && x.b !== id);
+    state.geoms = state.geoms.filter((g) => !g.ptIds.includes(id));
     state.selected.delete(id);
     renderResults();
   });
@@ -58743,6 +59046,23 @@ void main() {
     if (!d) return;
     state.dists.splice(+d.dataset.ddel, 1);
     renderResults();
+  });
+  $("#geom-table").addEventListener("click", (e) => {
+    const d = e.target.closest("[data-gdel]");
+    if (!d) return;
+    state.geoms.splice(+d.dataset.gdel, 1);
+    renderResults();
+  });
+  $("#btn-geom-finish").onclick = finishGeometry;
+  $("#btn-analyze").onclick = (e) => {
+    e.stopPropagation();
+    $("#btn-analyze").parentElement.classList.toggle("open");
+  };
+  document.addEventListener("click", () => $("#btn-analyze").parentElement.classList.remove("open"));
+  $$("#menu-analyze button").forEach((b) => b.onclick = () => {
+    const k = b.dataset.an;
+    if (state.task?.kind === k) endTask();
+    else startTask(k);
   });
   $("#btn-dist-sel").onclick = () => {
     const [a, b] = [...state.selected].map((id) => state.points.find((p) => p.id === id));
@@ -58756,6 +59076,7 @@ void main() {
     if (!state.points.length || confirm("\uCE21\uC815\uD55C \uC810\uACFC \uAC70\uB9AC\uB97C \uBAA8\uB450 \uC9C0\uC6B8\uAE4C\uC694?")) {
       state.points = [];
       state.dists = [];
+      state.geoms = [];
       state.selected.clear();
       renderResults();
     }
@@ -58877,8 +59198,13 @@ void main() {
     else if (k === "f") {
       const rp = refPoint();
       if (rp) moveTarget(rp);
-    } else if (e.key === "Enter") finishPoint();
-    else if (e.key === "Escape") $("#btn-cancel").click();
+    } else if (k === "a" && !e.ctrlKey && !e.metaKey) $$("#menu-analyze button")[0].click();
+    else if (k === "l") $$("#menu-analyze button")[1].click();
+    else if (k === "p") $$("#menu-analyze button")[2].click();
+    else if (e.key === "Enter") {
+      if (state.task && GEOM_NEED[state.task.kind] && state.rays.length === 0) finishGeometry();
+      else finishPoint();
+    } else if (e.key === "Escape") $("#btn-cancel").click();
     else if (e.key === "Backspace") {
       e.preventDefault();
       undoRay();
@@ -58895,6 +59221,7 @@ void main() {
   function resetAll(keepFile) {
     state.points = [];
     state.dists = [];
+    state.geoms = [];
     state.selected.clear();
     state.nextId = 1;
     state.task = null;
@@ -58965,6 +59292,12 @@ void main() {
     autoOrbit,
     origCoord,
     navAction,
+    geomInfo,
+    addGeom,
+    distanceDecomp,
+    finishGeometry,
+    taskPointAdded,
+    propagate,
     navOrbit,
     navPan,
     navZoom,
