@@ -57073,6 +57073,12 @@ void main() {
       title: "\uD30C\uC77C\uC774 \uB9E4\uC6B0 \uD07D\uB2C8\uB2E4 (\uAC00\uC6B0\uC2DC\uC548 300\uB9CC \uAC1C \uB610\uB294 700 MB \uCD08\uACFC)",
       why: "\uBE0C\uB77C\uC6B0\uC800\uB294 \uD30C\uC77C \uC804\uCCB4\uB97C \uBA54\uBAA8\uB9AC\uC5D0 \uC62C\uB9B0 \uB4A4 GPU\uB85C \uBCF4\uB0C5\uB2C8\uB2E4. 1 GB\uAC00 \uB118\uB294 PLY\uB294 \uC77D\uB294 \uB370 \uC218 \uBD84\uC774 \uAC78\uB9AC\uAC70\uB098 \uBA54\uBAA8\uB9AC \uBD80\uC871\uC73C\uB85C \uC2E4\uD328\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
       fix: "\uAC00\uC6B0\uC2DC\uC548 \uC218\uB97C 100\uB9CC~150\uB9CC \uAC1C\uB85C \uC904\uC778 \uD30C\uC77C\uC744 \uC0AC\uC6A9\uD558\uC138\uC694. \uC608: 3dgs-ply-3dtiles-converter simplify --target-count 1500000 --sh 0 \uC785\uB825.ply \uCD9C\uB825.ply (\uB610\uB294 SuperSplat\uC5D0\uC11C export). \uCE21\uC815 \uC815\uD655\uB3C4\uB294 \uAC00\uB298\uACE0 \uB0A0\uCE74\uB85C\uC6B4 \uAD6C\uC870\uAC00 \uBCF4\uC774\uB294 \uD55C \uC720\uC9C0\uB429\uB2C8\uB2E4."
+    },
+    E14: {
+      level: "info",
+      title: "\uC88C\uD45C \uAC12\uC774 \uB9E4\uC6B0 \uCEE4\uC11C \uBDF0\uC5B4 \uB0B4\uBD80 \uC6D0\uC810\uC744 \uC62E\uACBC\uC2B5\uB2C8\uB2E4 (\uD45C\uC2DC \uC88C\uD45C\uB294 \uC6D0\uB798 \uAC12)",
+      why: "\uC9C0\uC5ED\xB7\uAD6D\uAC00 \uC88C\uD45C\uACC4(\uC608: X\u2248285,000 m)\uB85C \uB9CC\uB4E0 \uD30C\uC77C\uC740 GPU \uAC00 \uC4F0\uB294 float32 \uB85C\uB294 \uADF8 \uD06C\uAE30\uC5D0\uC11C \uC57D 3 cm \uAC04\uACA9\uBC16\uC5D0 \uD45C\uD604\uD558\uC9C0 \uBABB\uD574 \uB80C\uB354\uB9C1\uC774 \uAE68\uC9C0\uAC70\uB098 \uC5F4\uB9AC\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uADF8\uB798\uC11C \uBDF0\uC5B4\uAC00 \uD30C\uC77C\uC744 \uC77D\uC73C\uBA74\uC11C \uBAA8\uB4E0 \uC88C\uD45C\uC5D0\uC11C \uC77C\uC815\uD55C \uAC12(\uC624\uD504\uC14B)\uC744 \uBE7C \uC6D0\uC810 \uADFC\uCC98\uB85C \uC62E\uAE34 \uB4A4 \uB80C\uB354\uB9C1\uD569\uB2C8\uB2E4.",
+      fix: "\uBCC4\uB3C4 \uC870\uCE58\uAC00 \uD544\uC694 \uC5C6\uC2B5\uB2C8\uB2E4. \uD654\uBA74\uC5D0 \uD45C\uC2DC\uB418\uB294 \uC88C\uD45C, \uB0B4\uBCF4\uB0B4\uAE30(CSV/JSON), \uAE30\uC900\uC810(GCP) \uBCF4\uC815 \uC785\uB825\uC740 \uBAA8\uB450 \uC624\uD504\uC14B\uC744 \uB2E4\uC2DC \uB354\uD55C \uC6D0\uB798 \uC88C\uD45C\uB97C \uC0AC\uC6A9\uD569\uB2C8\uB2E4. \uC624\uD504\uC14B \uAC12\uC740 [\uC815\uBCF4 \uC810\uAC80]\uC5D0\uC11C \uBCFC \uC218 \uC788\uC2B5\uB2C8\uB2E4."
     }
   };
   var QUALITY = {
@@ -57242,6 +57248,7 @@ void main() {
     mesh: null,
     bounds: null,
     centers: null,
+    coordOffset: null,
     unit: { known: false, factor: 1, sigmaRel: 0, source: "" },
     upSource: null,
     task: null,
@@ -57793,11 +57800,12 @@ void main() {
     return new Vector3(s * (R[0] * p.x + R[1] * p.y + R[2] * p.z) + T.t[0], s * (R[3] * p.x + R[4] * p.y + R[5] * p.z) + T.t[1], s * (R[6] * p.x + R[7] * p.y + R[8] * p.z) + T.t[2]);
   }
   function fmtCoord(p) {
-    const r = toReal(p);
+    const r = toReal(origCoord(p));
     if (r) return `(${r.x.toFixed(3)}, ${r.y.toFixed(3)}, ${r.z.toFixed(3)}) m ${state.unit.crs ? "\xB7 " + state.unit.crs : ""}`;
     const f = state.unit.known ? state.unit.factor : 1;
     const u = state.unit.known ? "m" : "u";
-    return `(${(p.x * f).toFixed(3)}, ${(p.y * f).toFixed(3)}, ${(p.z * f).toFixed(3)}) ${u}`;
+    const q = origCoord(p);
+    return `(${(q.x * f).toFixed(3)}, ${(q.y * f).toFixed(3)}, ${(q.z * f).toFixed(3)}) ${u}`;
   }
   function showError(code, extra = "", opts = {}) {
     const e = ERRORS[code];
@@ -57873,6 +57881,46 @@ void main() {
     const um = ctext.match(/up[\s_-]?axis\s*[:=]?\s*([+-]?)([xyz])/);
     h.upAxis = um ? (um[1] || "+") + um[2] : null;
     return h;
+  }
+  var PLY_TYPE_SIZE = { char: 1, int8: 1, uchar: 1, uint8: 1, short: 2, int16: 2, ushort: 2, uint16: 2, int: 4, int32: 4, uint: 4, uint32: 4, float: 4, float32: 4, double: 8, float64: 8 };
+  function shiftPlyInPlace(buf, h, off) {
+    if (h.format !== "binary_little_endian") return false;
+    const dv = new DataView(buf);
+    let pos = h.headerLength;
+    let done = false;
+    for (const name of h.order) {
+      const el = h.elements[name];
+      if (el.props.some((q) => q.type === "list")) return done;
+      const sizes = el.props.map((q) => PLY_TYPE_SIZE[q.type] || 0);
+      if (sizes.some((z) => !z)) return done;
+      const stride = sizes.reduce((a, b) => a + b, 0);
+      const offs = [];
+      let o = 0;
+      for (const z of sizes) {
+        offs.push(o);
+        o += z;
+      }
+      const idx = (nm) => {
+        const i = el.props.findIndex((q) => q.name === nm);
+        return i >= 0 && (el.props[i].type === "float" || el.props[i].type === "float32") ? offs[i] : -1;
+      };
+      const keys = name === "vertex" ? [["x", 0], ["y", 1], ["z", 2]] : name === "chunk" ? [["min_x", 0], ["min_y", 1], ["min_z", 2], ["max_x", 0], ["max_y", 1], ["max_z", 2]] : [];
+      const cols = keys.map(([nm, ax]) => [idx(nm), ax]).filter(([i]) => i >= 0);
+      if (cols.length) {
+        for (let v = 0; v < el.count; v++) {
+          const base = pos + v * stride;
+          if (base + stride > buf.byteLength) break;
+          for (const [ci, ax] of cols) dv.setFloat32(base + ci, dv.getFloat32(base + ci, true) - off[ax], true);
+        }
+        done = true;
+      }
+      pos += el.count * stride;
+    }
+    return done;
+  }
+  function origCoord(p) {
+    const o = state.coordOffset;
+    return o ? new Vector3(p.x + o[0], p.y + o[1], p.z + o[2]) : p.clone();
   }
   function positionsFromPly(buf, h) {
     if (!h || h.compressed || h.format !== "binary_little_endian" || h.order[0] !== "vertex") return null;
@@ -57963,6 +58011,22 @@ void main() {
       state.mesh = null;
     }
     resetAll(true);
+    state.coordOffset = null;
+    if (header) {
+      const sample = positionsFromPly(buf, header);
+      if (sample) {
+        const b = boundsFromPositions(sample);
+        const c = b.center;
+        const big = Math.max(Math.abs(c.x), Math.abs(c.y), Math.abs(c.z)) > Math.max(2e3, 200 * b.radius);
+        if (big) {
+          const off = [Math.round(c.x), Math.round(c.y), Math.round(c.z)];
+          if (shiftPlyInPlace(buf, header, off)) {
+            state.coordOffset = off;
+            showError("E14", `\uC624\uD504\uC14B (${off.join(", ")}) \uB97C \uBE7C\uC11C \uB80C\uB354\uB9C1\uD569\uB2C8\uB2E4. \uC88C\uD45C \uD06C\uAE30 \u2248 ${Math.max(...off.map(Math.abs)).toLocaleString()} u.<br><b>\uD78C\uD2B8:</b> \uC774\uB7F0 \uD30C\uC77C\uC740 \uB300\uAC1C \uAD6D\uAC00\xB7\uC9C0\uC5ED \uC88C\uD45C\uACC4(\uBBF8\uD130)\uB85C \uB9CC\uB4E0 \uAC83\uC785\uB2C8\uB2E4. \uCD95\uCC99 \uBC30\uB108\uAC00 \uB728\uBA74 [\uCD95\uCC99 \uC9C1\uC811 \uC785\uB825]\uC5D0 <b>1</b> \uC744 \uB123\uC73C\uC138\uC694(1 u = 1 m). \uD655\uC2E4\uD558\uC9C0 \uC54A\uC73C\uBA74 \u2460 \uAE38\uC774 \uBCF4\uC815\uC73C\uB85C \uD655\uC778\uD558\uC138\uC694.`);
+          } else showError("E13", "\uC88C\uD45C\uAC00 \uB9E4\uC6B0 \uD06C\uC9C0\uB9CC \uC774 PLY \uAD6C\uC870\uC5D0\uC11C\uB294 \uC6D0\uC810 \uC774\uB3D9\uC744 \uC801\uC6A9\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uB80C\uB354\uB9C1\uC774 \uAE68\uC9C8 \uC218 \uC788\uC2B5\uB2C8\uB2E4.");
+        }
+      }
+    }
     const fileType = { ply: "ply", spz: "spz", splat: "splat", ksplat: "ksplat" }[ext];
     const bigFile = header ? header.count > 15e5 : main.size > 15e7;
     let mesh;
@@ -57999,7 +58063,10 @@ void main() {
     state.centers = pos ? Float32Array.from(pos) : null;
     const upFromHeader = header?.upAxis ? { "+z": [0, 0, 1], "-z": [0, 0, -1], "+y": [0, 1, 0], "-y": [0, -1, 0], "+x": [1, 0, 0], "-x": [-1, 0, 0] }[header.upAxis] : null;
     if (upFromHeader) setUp(new Vector3(...upFromHeader), "PLY \uD5E4\uB354(up axis)");
-    else {
+    else if (state.coordOffset) {
+      setUp(new Vector3(0, 0, 1), "\uD070 \uC88C\uD45C(\uC9C0\uC624\uB9AC\uD37C\uB7F0\uC2F1) \uD30C\uC77C \u2192 +Z \uCD94\uC815");
+      showError("E06", "\uC9C0\uC5ED\xB7\uAD6D\uAC00 \uC88C\uD45C\uACC4 \uD30C\uC77C\uC740 \uBCF4\uD1B5 Z \uAC00 \uB192\uC774\uC774\uBBC0\uB85C +Z \uB85C \uAC00\uC815\uD588\uC2B5\uB2C8\uB2E4.");
+    } else {
       setUp(new Vector3(...ext === "spz" ? [0, 1, 0] : [0, -1, 0]), null);
       showError("E06", `\uD604\uC7AC \uAC00\uC815: ${ext === "spz" ? "+Y (SPZ \uAD00\uB840)" : "\u2212Y (COLMAP 3DGS \uAD00\uB840)"}`);
     }
@@ -58630,6 +58697,7 @@ void main() {
     if (state.file) {
       if (state.unit.known) it("ok", "\uCD95\uCC99 (1 u \u2192 m)", `${state.unit.source} \xB7 1 u = ${state.unit.factor.toPrecision(6)} m${state.unit.sigmaRel ? ` \xB7 \uCD95\uCC99 \uC0C1\uB300 \uBD88\uD655\uB3C4 \u2248 ${(state.unit.sigmaRel * 100).toFixed(1)} %` : ""}`);
       else it("warn", "\uCD95\uCC99 (1 u \u2192 m)", ERRORS.E05.why, ERRORS.E05.fix);
+      if (state.coordOffset) it("ok", "\uC88C\uD45C \uC6D0\uC810 \uC774\uB3D9", `\uD30C\uC77C \uC88C\uD45C\uAC00 \uCEE4\uC11C \uBDF0\uC5B4 \uB0B4\uBD80\uC5D0\uC11C (${state.coordOffset.join(", ")}) \uB97C \uBE90\uC2B5\uB2C8\uB2E4. \uD45C\uC2DC\xB7\uB0B4\uBCF4\uB0B4\uAE30 \uC88C\uD45C\uB294 \uC6D0\uB798 \uAC12\uC785\uB2C8\uB2E4.`);
       it(state.upSource ? "ok" : "warn", "\uC704(\u4E0A) \uBC29\uD5A5", state.upSource ? `${state.upSource}: ${$("#up-label").textContent}` : `\uC815\uBCF4 \uC5C6\uC74C \u2192 ${$("#up-label").textContent} \uAC00\uC815 (\uCE21\uC815 \uC815\uD655\uB3C4 \uBB34\uAD00)`, state.upSource ? "" : ERRORS.E06.fix);
     }
     if (state.task) {
@@ -58814,7 +58882,7 @@ void main() {
         showError("E10", `\uC2E4\uC81C \uC88C\uD45C(X\xB7Y\xB7Z \uBAA8\uB450)\uAC00 \uC785\uB825\uB41C \uC810\uC774 ${used.length}\uAC1C\uC785\uB2C8\uB2E4. 2\uAC1C \uC774\uC0C1 \uD544\uC694\uD569\uB2C8\uB2E4.`);
         return;
       }
-      const P = used.map((p) => p.p.clone()), Q = used.map((p) => new Vector3(g[p.name].x * f, g[p.name].y * f, g[p.name].z * f));
+      const P = used.map((p) => origCoord(p.p)), Q = used.map((p) => new Vector3(g[p.name].x * f, g[p.name].y * f, g[p.name].z * f));
       const r = similarityFromPairs(P, Q);
       if (!(r.s > 0) || !Number.isFinite(r.s)) {
         showError("E10", "\uAC19\uC740 \uC704\uCE58\uC758 \uC810\uC774 \uC788\uAC70\uB098 \uC88C\uD45C\uAC00 \uC798\uBABB\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
@@ -58842,7 +58910,7 @@ void main() {
       };
       $("#gcp-json").onclick = () => {
         apply();
-        download(`${state.file.name}.scale.json`, JSON.stringify({ units: "model", scale_to_meters: r.s, scale_sigma_rel: state.unit.sigmaRel, transform: state.unit.transform, crs, gcp: used.map((p, k) => ({ point: p.name, model: p.p.toArray(), real_m: Q[k].toArray(), residual_m: r.residuals[k] })), file: { name: state.file.name, size: state.file.size }, generated_by: "3DGS \uB2E4\uC2DC\uC810 \uAC70\uB9AC \uCE21\uC815\uAE30", when: (/* @__PURE__ */ new Date()).toISOString() }, null, 2), "application/json");
+        download(`${state.file.name}.scale.json`, JSON.stringify({ units: "model", scale_to_meters: r.s, scale_sigma_rel: state.unit.sigmaRel, transform: state.unit.transform, crs, gcp: used.map((p, k) => ({ point: p.name, model: origCoord(p.p).toArray(), real_m: Q[k].toArray(), residual_m: r.residuals[k] })), file: { name: state.file.name, size: state.file.size }, generated_by: "3DGS \uB2E4\uC2DC\uC810 \uAC70\uB9AC \uCE21\uC815\uAE30", when: (/* @__PURE__ */ new Date()).toISOString() }, null, 2), "application/json");
         closeModal();
       };
     };
@@ -58918,8 +58986,9 @@ void main() {
       const f = state.unit.known ? state.unit.factor : null;
       let csv = "\uFEFFtype,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs\n";
       for (const p of state.points) {
-        const rr = toReal(p.p);
-        csv += `point,${p.id},${p.name},${p.p.x},${p.p.y},${p.p.z},${p.sigma0},${f ? p.p.x * f : ""},${f ? p.p.y * f : ""},${f ? p.p.z * f : ""},${f ? p.sigma0 * f : ""},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ""},${rr ? rr.y : ""},${rr ? rr.z : ""},${rr ? state.unit.crs || "" : ""}
+        const po = origCoord(p.p);
+        const rr = toReal(po);
+        csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ""},${f ? po.y * f : ""},${f ? po.z * f : ""},${f ? p.sigma0 * f : ""},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ""},${rr ? rr.y : ""},${rr ? rr.z : ""},${rr ? state.unit.crs || "" : ""}
 `;
       }
       csv += "\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,unit_source\n";
@@ -58932,7 +59001,7 @@ void main() {
       }
       download(`${state.file.name}.measurements.csv`, csv, "text/csv");
     };
-    $("#ex-json").onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $("#up-label").textContent, points: state.points.map((p) => ({ ...p, p: p.p.toArray(), cov: p.cov.toArray() })), distances: state.dists.map((d) => {
+    $("#ex-json").onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $("#up-label").textContent, coord_offset_subtracted_in_viewer: state.coordOffset, points: state.points.map((p) => ({ ...p, p: origCoord(p.p).toArray(), p_viewer: p.p.toArray(), cov: p.cov.toArray() })), distances: state.dists.map((d) => {
       const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b);
       const di = a && b ? distanceInfo(a, b) : null;
       return { a: d.a, b: d.b, dist_model: di?.d, sigma_model: di?.sigma };
@@ -59273,6 +59342,7 @@ void main() {
     frameAll,
     autoRotate,
     autoOrbit,
+    origCoord,
     navAction,
     navOrbit,
     navPan,
