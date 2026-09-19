@@ -56877,7 +56877,7 @@ void main() {
     selected: /* @__PURE__ */ new Set(),
     nextId: 1,
     nextGeomId: 1,
-    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 2, ptMode: "gauss", ptScale: 0.7, ptMaxPx: 6, hideBig: true, cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, dunit: "auto", labels: true },
+    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 1, ptMode: "dense", ptScale: 0.7, ptMaxPx: 6, hideBig: true, densify: "auto", cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, dunit: "auto", labels: true },
     autoPivot: null,
     autoAngleDeg: 0,
     autoTiltDeg: 0,
@@ -57721,7 +57721,8 @@ void main() {
     if (ix < 0) return null;
     const aligned = h.headerLength % 4 === 0;
     const f32 = aligned ? new Float32Array(buf, h.headerLength, v.count * k) : new Float32Array(buf.slice(h.headerLength, h.headerLength + v.count * k * 4));
-    const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3), rad = new Float32Array(v.count);
+    const iq = h.names.indexOf("rot_0");
+    const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3), rad = new Float32Array(v.count), scl = new Float32Array(v.count * 3), quat = new Float32Array(v.count * 4);
     let n = 0;
     for (let i = 0; i < v.count; i++) {
       const b = i * k;
@@ -57735,17 +57736,33 @@ void main() {
         const a = Math.exp(f32[b + is0]), b22 = Math.exp(f32[b + is0 + 1]), c2 = h.names.includes("scale_2") ? Math.exp(f32[b + is0 + 2]) : Math.min(a, b22);
         const srt = [a, b22, c2].sort((x, y) => y - x);
         rad[n] = Math.sqrt(srt[0] * srt[1]);
-      } else rad[n] = 0;
+        scl[3 * n] = a;
+        scl[3 * n + 1] = b22;
+        scl[3 * n + 2] = c2;
+      } else {
+        rad[n] = 0;
+        scl[3 * n] = scl[3 * n + 1] = scl[3 * n + 2] = 0;
+      }
+      if (iq >= 0) {
+        const qw = f32[b + iq], qx = f32[b + iq + 1], qy = f32[b + iq + 2], qz = f32[b + iq + 3];
+        const L = Math.hypot(qw, qx, qy, qz) || 1;
+        quat[4 * n] = qw / L;
+        quat[4 * n + 1] = qx / L;
+        quat[4 * n + 2] = qy / L;
+        quat[4 * n + 3] = qz / L;
+      } else {
+        quat[4 * n] = 1;
+      }
       n++;
     }
-    return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), n };
+    return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), n };
   }
   function buildCloudFromMesh(mesh) {
     try {
       const src = mesh.splats || mesh.packedSplats;
       const N = src?.numSplats || 0;
       if (!N || !src.forEachSplat) return null;
-      const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N);
+      const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N), scl = new Float32Array(N * 3), quat = new Float32Array(N * 4);
       let n = 0;
       src.forEachSplat((i, c, sc, q, op, color) => {
         if (op < 0.05) return;
@@ -57757,9 +57774,16 @@ void main() {
         col[3 * n + 2] = Math.round(color.b * 255);
         const srt = [sc.x, sc.y, sc.z].sort((x, y) => y - x);
         rad[n] = Math.sqrt(srt[0] * srt[1]);
+        scl[3 * n] = sc.x;
+        scl[3 * n + 1] = sc.y;
+        scl[3 * n + 2] = sc.z;
+        quat[4 * n] = q.w;
+        quat[4 * n + 1] = q.x;
+        quat[4 * n + 2] = q.y;
+        quat[4 * n + 3] = q.z;
         n++;
       });
-      return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), n };
+      return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), n };
     } catch (e) {
       console.warn("\uC810\uAD70 \uCD94\uCD9C \uC2E4\uD328", e);
       return null;
@@ -57820,8 +57844,70 @@ void main() {
     m.uniforms.uScale.value = st.ptScale;
     m.uniforms.uMinPx.value = Math.max(1, st.ptSize * 0.5) * dpr;
     m.uniforms.uMaxPx.value = Math.max(1, st.ptMaxPx || 6) * dpr;
-    m.uniforms.uHideBig.value = st.hideBig ? 1 : 0;
+    m.uniforms.uHideBig.value = st.hideBig && st.ptMode !== "dense" ? 1 : 0;
     m.uniforms.uBigRad.value = state.cloud?.bigRad ?? 1e30;
+  }
+  var DENSE_MAX_POINTS = 2e7;
+  function densifyFactor(cl) {
+    const st = state.settings;
+    if (st.ptMode !== "dense") return 1;
+    const auto = Math.max(1, Math.min(10, Math.floor(DENSE_MAX_POINTS / Math.max(1, cl.n))));
+    if (st.densify === "auto") return auto;
+    return Math.max(1, Math.min(auto, +st.densify || 1));
+  }
+  function buildDenseSamples(cl, K, colors) {
+    const hide = state.settings.hideBig && cl.bigRad != null ? cl.bigRad : Infinity;
+    const spread = 0.8;
+    let keep = 0;
+    for (let i = 0; i < cl.n; i++) if (cl.rad[i] <= hide) keep++;
+    const M = keep * K;
+    const pos = new Float32Array(M * 3), col = new Uint8Array(M * 3);
+    let seed = 123456789;
+    const rnd = () => {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      return (seed >>> 0) / 4294967296;
+    };
+    let m = 0;
+    for (let i = 0; i < cl.n; i++) {
+      if (cl.rad[i] > hide) continue;
+      const cx = cl.pos[3 * i], cy = cl.pos[3 * i + 1], cz = cl.pos[3 * i + 2];
+      const sx = cl.scl[3 * i] * spread, sy = cl.scl[3 * i + 1] * spread, sz = cl.scl[3 * i + 2] * spread;
+      const qw = cl.quat[4 * i], qx = cl.quat[4 * i + 1], qy = cl.quat[4 * i + 2], qz = cl.quat[4 * i + 3];
+      const r00 = 1 - 2 * (qy * qy + qz * qz), r01 = 2 * (qx * qy - qz * qw), r02 = 2 * (qx * qz + qy * qw), r10 = 2 * (qx * qy + qz * qw), r11 = 1 - 2 * (qx * qx + qz * qz), r12 = 2 * (qy * qz - qx * qw), r20 = 2 * (qx * qz - qy * qw), r21 = 2 * (qy * qz + qx * qw), r22 = 1 - 2 * (qx * qx + qy * qy);
+      const c0 = colors[3 * i], c1 = colors[3 * i + 1], c2 = colors[3 * i + 2];
+      for (let k = 0; k < K; k++) {
+        let gx = 0, gy = 0, gz = 0;
+        if (k > 0) {
+          const u1 = Math.max(rnd(), 1e-9), u2 = rnd(), u3 = Math.max(rnd(), 1e-9), u4 = rnd();
+          const rr = Math.sqrt(-2 * Math.log(u1)), r2 = Math.sqrt(-2 * Math.log(u3));
+          gx = rr * Math.cos(6.283185307 * u2);
+          gy = rr * Math.sin(6.283185307 * u2);
+          gz = r2 * Math.cos(6.283185307 * u4);
+        }
+        const lx = gx * sx, ly = gy * sy, lz = gz * sz;
+        pos[3 * m] = cx + r00 * lx + r01 * ly + r02 * lz;
+        pos[3 * m + 1] = cy + r10 * lx + r11 * ly + r12 * lz;
+        pos[3 * m + 2] = cz + r20 * lx + r21 * ly + r22 * lz;
+        col[3 * m] = c0;
+        col[3 * m + 1] = c1;
+        col[3 * m + 2] = c2;
+        m++;
+      }
+    }
+    return { pos, col, n: M };
+  }
+  function updateDenseLabel() {
+    const el = $("#q-dense-info");
+    if (!el) return;
+    const cl = state.cloud;
+    if (!cl) {
+      el.textContent = "";
+      return;
+    }
+    const di = state.denseInfo;
+    el.textContent = di ? `\uD45C\uC2DC ${di.total.toLocaleString()}\uC810 = \uAC00\uC6B0\uC2DC\uC548 ${cl.n.toLocaleString()} \xD7 ${di.K} (\uC0DD\uC131 ${di.ms} ms, \uC57D ${di.mb} MB)` : `\uD45C\uC2DC ${cl.n.toLocaleString()}\uC810 (\uAC00\uC6B0\uC2DC\uC548 \uC911\uC2EC)`;
   }
   function rebuildPoints() {
     if (state.points3) {
@@ -57836,12 +57922,24 @@ void main() {
       const sorted = Float32Array.from(cl.rad).sort();
       cl.bigRad = sorted[Math.floor(cl.n * 0.99)];
     }
+    const colors = cloudColors(cl);
+    const K = densifyFactor(cl);
+    let src = cl, srcCol = colors, isDense = false;
+    if (state.settings.ptMode === "dense" && cl.scl && cl.quat) {
+      const t0 = performance.now();
+      const d = buildDenseSamples(cl, K, colors);
+      src = d;
+      srcCol = d.col;
+      isDense = true;
+      state.denseInfo = { K, total: d.n, ms: Math.round(performance.now() - t0), mb: +(d.n * 15 / 1e6).toFixed(0) };
+    } else state.denseInfo = null;
     const g = new BufferGeometry();
-    g.setAttribute("position", new BufferAttribute(cl.pos, 3));
-    g.setAttribute("color", new BufferAttribute(cloudColors(cl), 3, true));
-    g.setAttribute("rad", new BufferAttribute(cl.rad || new Float32Array(cl.n), 1));
+    g.setAttribute("position", new BufferAttribute(src.pos, 3));
+    g.setAttribute("color", new BufferAttribute(srcCol, 3, true));
+    g.setAttribute("rad", new BufferAttribute(isDense ? new Float32Array(src.n) : cl.rad || new Float32Array(cl.n), 1));
     const m = new ShaderMaterial({ vertexShader: CLOUD_VS, fragmentShader: CLOUD_FS, vertexColors: true, uniforms: { uFocal: { value: 1e3 }, uMode: { value: 1 }, uPx: { value: 2 }, uScale: { value: 1 }, uMinPx: { value: 1 }, uMaxPx: { value: 24 }, uHideBig: { value: 1 }, uBigRad: { value: 1e30 } }, depthTest: true, depthWrite: true });
     cloudUniforms(m);
+    updateDenseLabel();
     state.points3 = new Points(g, m);
     state.points3.frustumCulled = false;
     state.points3.onBeforeRender = () => cloudUniforms(m);
@@ -59292,10 +59390,25 @@ void main() {
   $("#set-autorot").onchange = (e) => setSetting("autoRotate", e.target.checked);
   $("#set-navpad").onchange = (e) => setSetting("navpad", e.target.checked);
   $("#set-ptsize").oninput = (e) => setSetting("ptSize", +e.target.value);
-  $("#set-ptmode").onchange = (e) => setSetting("ptMode", e.target.value);
+  $("#set-ptmode").onchange = (e) => {
+    setSetting("ptMode", e.target.value);
+    rebuildPoints();
+  };
+  $("#q-ptmode").onchange = (e) => {
+    setSetting("ptMode", e.target.value);
+    rebuildPoints();
+  };
+  $("#set-hidebig").onchange = (e) => {
+    setSetting("hideBig", e.target.checked);
+    if (state.settings.ptMode === "dense") rebuildPoints();
+  };
+  $$("#set-densify, #q-densify").forEach((el) => el.onchange = (e) => {
+    setSetting("densify", e.target.value);
+    rebuildPoints();
+  });
   $$("#set-ptmax, #q-ptmax").forEach((el) => el.oninput = (e) => setSetting("ptMaxPx", +e.target.value));
   $("#q-ptscale").oninput = (e) => setSetting("ptScale", +e.target.value);
-  $("#q-ptmode").onchange = (e) => setSetting("ptMode", e.target.value);
+  $("#q-ptpx").oninput = (e) => setSetting("ptSize", +e.target.value);
   $("#set-hidebig").onchange = (e) => setSetting("hideBig", e.target.checked);
   $("#set-ptscale").oninput = (e) => setSetting("ptScale", +e.target.value);
   $("#set-cloudcolor").onchange = (e) => {
@@ -59438,6 +59551,14 @@ void main() {
     $("#ptsize-label").textContent = `${st.ptSize} px`;
     $("#set-ptmode").value = st.ptMode;
     $("#q-ptmode").value = st.ptMode;
+    $$("#set-densify, #q-densify").forEach((el) => el.value = String(st.densify));
+    $("#q-ptpx").value = st.ptSize;
+    $("#q-ptpx-label").textContent = `${st.ptSize} px`;
+    $("#row-dense-q").hidden = st.ptMode !== "dense";
+    $("#row-gauss-q").hidden = st.ptMode !== "gauss";
+    $("#row-gauss-q2").hidden = st.ptMode !== "gauss";
+    $("#row-px-q").hidden = st.ptMode === "gauss";
+    updateDenseLabel();
     $("#set-hidebig").checked = st.hideBig;
     $("#set-ptscale").value = st.ptScale;
     $("#q-ptscale").value = st.ptScale;
@@ -59571,8 +59692,14 @@ void main() {
       else if (e.key === "ArrowUp") autoOrbit(Math.min(st, 45), "v");
       else autoOrbit(-Math.min(st, 45), "v");
     } else if ((e.key === "-" || e.key === "=" || e.key === "+") && state.points3 && state.settings.viewMode !== "splat") {
-      setSetting("ptMaxPx", Math.max(1, Math.min(24, state.settings.ptMaxPx + (e.key === "-" ? -1 : 1))));
-      toast(`\uC810\uAD70 \uCD5C\uB300 \uC810 \uD06C\uAE30 ${state.settings.ptMaxPx} px`, "info", 1200);
+      const d = e.key === "-" ? -1 : 1;
+      if (state.settings.ptMode === "gauss") {
+        setSetting("ptMaxPx", Math.max(1, Math.min(24, state.settings.ptMaxPx + d)));
+        toast(`\uC810\uAD70 \uCD5C\uB300 \uC810 \uD06C\uAE30 ${state.settings.ptMaxPx} px`, "info", 1200);
+      } else {
+        setSetting("ptSize", Math.max(0.5, Math.min(6, +(state.settings.ptSize + 0.5 * d).toFixed(1))));
+        toast(`\uC810\uAD70 \uC810 \uD06C\uAE30 ${state.settings.ptSize} px`, "info", 1200);
+      }
     } else if (e.key === "[" || e.key === "]") setSetting("zoom", Math.max(2, Math.min(5, state.settings.zoom + (e.key === "]" ? 0.5 : -0.5))));
   });
   function resetAll(keepFile) {
@@ -59650,6 +59777,7 @@ void main() {
     origCoord,
     navAction,
     directPick,
+    rebuildPoints,
     addPickedPoint,
     applyViewMode,
     startRefine,
