@@ -12,7 +12,7 @@ const DEG = Math.PI / 180;
 
 // ------------------------------------------------------------------ 상태
 const state = {
-  file: null, header: null, mesh: null, bounds: null, centers: null,
+  file: null, header: null, mesh: null, bounds: null, centers: null, coordOffset: null,
   unit: { known: false, factor: 1, sigmaRel: 0, source: '' },
   upSource: null,
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
@@ -346,7 +346,7 @@ function fmtLen(vModel, sigModel = null, dist = false) {
   return `${(m * k).toFixed(dec)}${s != null ? ` ± ${(s * k).toFixed(dec)}` : ''} ${unit}`;
 }
 function toReal(p) { const T = state.unit.transform; if (!T) return null; const R = T.R, s = T.s; return new THREE.Vector3(s * (R[0] * p.x + R[1] * p.y + R[2] * p.z) + T.t[0], s * (R[3] * p.x + R[4] * p.y + R[5] * p.z) + T.t[1], s * (R[6] * p.x + R[7] * p.y + R[8] * p.z) + T.t[2]); }
-function fmtCoord(p) { const r = toReal(p); if (r) return `(${r.x.toFixed(3)}, ${r.y.toFixed(3)}, ${r.z.toFixed(3)}) m ${state.unit.crs ? '· ' + state.unit.crs : ''}`; const f = state.unit.known ? state.unit.factor : 1; const u = state.unit.known ? 'm' : 'u'; return `(${(p.x * f).toFixed(3)}, ${(p.y * f).toFixed(3)}, ${(p.z * f).toFixed(3)}) ${u}`; }
+function fmtCoord(p) { const r = toReal(origCoord(p)); if (r) return `(${r.x.toFixed(3)}, ${r.y.toFixed(3)}, ${r.z.toFixed(3)}) m ${state.unit.crs ? '· ' + state.unit.crs : ''}`; const f = state.unit.known ? state.unit.factor : 1; const u = state.unit.known ? 'm' : 'u'; const q = origCoord(p); return `(${(q.x * f).toFixed(3)}, ${(q.y * f).toFixed(3)}, ${(q.z * f).toFixed(3)}) ${u}`; }
 
 // ------------------------------------------------------------------ 알림
 function showError(code, extra = '', opts = {}) {
@@ -389,6 +389,24 @@ function parsePlyHeader(buf) {
   const um = ctext.match(/up[\s_-]?axis\s*[:=]?\s*([+-]?)([xyz])/); h.upAxis = um ? (um[1] || '+') + um[2] : null;
   return h;
 }
+const PLY_TYPE_SIZE = { char: 1, int8: 1, uchar: 1, uint8: 1, short: 2, int16: 2, ushort: 2, uint16: 2, int: 4, int32: 4, uint: 4, uint32: 4, float: 4, float32: 4, double: 8, float64: 8 };
+// 좌표가 매우 큰 PLY(지역·국가 좌표계)의 x,y,z 에서 오프셋을 빼 원점 근처로 옮긴다(버퍼 제자리 수정). 압축 PLY 는 chunk 의 min/max 를 옮긴다.
+function shiftPlyInPlace(buf, h, off) {
+  if (h.format !== 'binary_little_endian') return false;
+  const dv = new DataView(buf); let pos = h.headerLength; let done = false;
+  for (const name of h.order) {
+    const el = h.elements[name]; if (el.props.some((q) => q.type === 'list')) return done; // list 속성은 길이를 알 수 없음
+    const sizes = el.props.map((q) => PLY_TYPE_SIZE[q.type] || 0); if (sizes.some((z) => !z)) return done;
+    const stride = sizes.reduce((a, b) => a + b, 0); const offs = []; let o = 0; for (const z of sizes) { offs.push(o); o += z; }
+    const idx = (nm) => { const i = el.props.findIndex((q) => q.name === nm); return i >= 0 && (el.props[i].type === 'float' || el.props[i].type === 'float32') ? offs[i] : -1; };
+    const keys = name === 'vertex' ? [['x', 0], ['y', 1], ['z', 2]] : name === 'chunk' ? [['min_x', 0], ['min_y', 1], ['min_z', 2], ['max_x', 0], ['max_y', 1], ['max_z', 2]] : [];
+    const cols = keys.map(([nm, ax]) => [idx(nm), ax]).filter(([i]) => i >= 0);
+    if (cols.length) { for (let v = 0; v < el.count; v++) { const base = pos + v * stride; if (base + stride > buf.byteLength) break; for (const [ci, ax] of cols) dv.setFloat32(base + ci, dv.getFloat32(base + ci, true) - off[ax], true); } done = true; }
+    pos += el.count * stride;
+  }
+  return done;
+}
+function origCoord(p) { const o = state.coordOffset; return o ? new THREE.Vector3(p.x + o[0], p.y + o[1], p.z + o[2]) : p.clone(); } // 뷰어 내부 좌표 → 파일 원래 좌표
 function positionsFromPly(buf, h) {
   if (!h || h.compressed || h.format !== 'binary_little_endian' || h.order[0] !== 'vertex') return null;
   const v = h.elements.vertex; if (v.props.some((p) => p.type !== 'float' && p.type !== 'float32')) return null;
@@ -428,7 +446,12 @@ async function loadFiles(fileList) {
   }
   // 이전 모델 제거
   if (state.mesh) { scene.remove(state.mesh); try { state.mesh.dispose?.(); } catch (_) {} state.mesh = null; }
-  resetAll(true);
+  resetAll(true); state.coordOffset = null;
+  if (header) { // 지역·국가 좌표계처럼 좌표가 크면 원점 이동 (float32 정밀도 보호). 원래 좌표는 origCoord() 로 복원
+    const sample = positionsFromPly(buf, header);
+    if (sample) { const b = boundsFromPositions(sample); const c = b.center; const big = Math.max(Math.abs(c.x), Math.abs(c.y), Math.abs(c.z)) > Math.max(2000, 200 * b.radius);
+      if (big) { const off = [Math.round(c.x), Math.round(c.y), Math.round(c.z)]; if (shiftPlyInPlace(buf, header, off)) { state.coordOffset = off; showError('E14', `오프셋 (${off.join(', ')}) 를 빼서 렌더링합니다. 좌표 크기 ≈ ${Math.max(...off.map(Math.abs)).toLocaleString()} u.<br><b>힌트:</b> 이런 파일은 대개 국가·지역 좌표계(미터)로 만든 것입니다. 축척 배너가 뜨면 [축척 직접 입력]에 <b>1</b> 을 넣으세요(1 u = 1 m). 확실하지 않으면 ① 길이 보정으로 확인하세요.`); } else showError('E13', '좌표가 매우 크지만 이 PLY 구조에서는 원점 이동을 적용하지 못했습니다. 렌더링이 깨질 수 있습니다.'); } }
+  }
   const fileType = { ply: 'ply', spz: 'spz', splat: 'splat', ksplat: 'ksplat' }[ext];
   const bigFile = header ? header.count > 1500000 : main.size > 150e6;
   let mesh;
@@ -450,6 +473,7 @@ async function loadFiles(fileList) {
   // 위 방향
   const upFromHeader = header?.upAxis ? { '+z': [0, 0, 1], '-z': [0, 0, -1], '+y': [0, 1, 0], '-y': [0, -1, 0], '+x': [1, 0, 0], '-x': [-1, 0, 0] }[header.upAxis] : null;
   if (upFromHeader) setUp(new THREE.Vector3(...upFromHeader), 'PLY 헤더(up axis)');
+  else if (state.coordOffset) { setUp(new THREE.Vector3(0, 0, 1), '큰 좌표(지오리퍼런싱) 파일 → +Z 추정'); showError('E06', '지역·국가 좌표계 파일은 보통 Z 가 높이이므로 +Z 로 가정했습니다.'); }
   else { setUp(new THREE.Vector3(...(ext === 'spz' ? [0, 1, 0] : [0, -1, 0])), null); showError('E06', `현재 가정: ${ext === 'spz' ? '+Y (SPZ 관례)' : '−Y (COLMAP 3DGS 관례)'}`); }
   frameAll();
   // 단위
@@ -697,7 +721,7 @@ function openChecklist() {
   it(state.webgl2 ? 'ok' : 'bad', 'WebGL2', state.webgl2 ? '사용 가능' : ERRORS.E01.why, state.webgl2 ? '' : ERRORS.E01.fix);
   if (!state.file) it('na', '파일', '아직 열지 않음', '파일을 끌어다 놓거나 [파일 열기]');
   else { const f = state.file, h = state.header; it('ok', '파일', `${f.name} · ${(f.size / 1e6).toFixed(1)} MB · ${f.ext.toUpperCase()}${f.count ? ` · 가우시안 ${f.count.toLocaleString()}개` : ''}${h ? ` · SH ${h.shDegree}차${h.compressed ? ' · 압축 PLY' : ''}` : ''}`); if (h) it('ok', '3DGS 속성', h.compressed ? 'SuperSplat 압축 PLY (렌더러가 해석)' : `opacity · scale_0~2 · rot_0~3 확인`); else it('ok', '3DGS 속성', `${f.ext.toUpperCase()} 형식 — 렌더러(Spark)가 해석함`); }
-  if (state.file) { if (state.unit.known) it('ok', '축척 (1 u → m)', `${state.unit.source} · 1 u = ${state.unit.factor.toPrecision(6)} m${state.unit.sigmaRel ? ` · 축척 상대 불확도 ≈ ${(state.unit.sigmaRel * 100).toFixed(1)} %` : ''}`); else it('warn', '축척 (1 u → m)', ERRORS.E05.why, ERRORS.E05.fix); it(state.upSource ? 'ok' : 'warn', '위(上) 방향', state.upSource ? `${state.upSource}: ${$('#up-label').textContent}` : `정보 없음 → ${$('#up-label').textContent} 가정 (측정 정확도 무관)`, state.upSource ? '' : ERRORS.E06.fix); }
+  if (state.file) { if (state.unit.known) it('ok', '축척 (1 u → m)', `${state.unit.source} · 1 u = ${state.unit.factor.toPrecision(6)} m${state.unit.sigmaRel ? ` · 축척 상대 불확도 ≈ ${(state.unit.sigmaRel * 100).toFixed(1)} %` : ''}`); else it('warn', '축척 (1 u → m)', ERRORS.E05.why, ERRORS.E05.fix); if (state.coordOffset) it('ok', '좌표 원점 이동', `파일 좌표가 커서 뷰어 내부에서 (${state.coordOffset.join(', ')}) 를 뺐습니다. 표시·내보내기 좌표는 원래 값입니다.`); it(state.upSource ? 'ok' : 'warn', '위(上) 방향', state.upSource ? `${state.upSource}: ${$('#up-label').textContent}` : `정보 없음 → ${$('#up-label').textContent} 가정 (측정 정확도 무관)`, state.upSource ? '' : ERRORS.E06.fix); }
   if (state.task) { const n = state.rays.length, e = state.estimate; if (n < 2) it('bad', '진행 중 측정: 광선 수', `${n}개 — ${ERRORS.E07.why}`, ERRORS.E07.fix); else { it(e.maxAngleDeg >= 20 ? 'ok' : e.maxAngleDeg >= 10 ? 'warn' : 'bad', '진행 중 측정: 광선 각도', `최대 ${e.maxAngleDeg.toFixed(1)}° (20° 이상 권장)`, e.maxAngleDeg < 20 ? ERRORS.E08.fix : ''); it(e.pxRms <= 1.5 ? 'ok' : e.pxRms <= 4 ? 'warn' : 'bad', '진행 중 측정: 광선 잔차', `RMS ${e.pxRms.toFixed(1)} px · σ₀ ${fmtLen(e.sigma0)}`, e.pxRms > 4 ? ERRORS.E09.fix : ''); } }
   it(state.points.length ? 'ok' : 'na', '결과', `점 ${state.points.length}개 · 거리 ${state.dists.length}개${state.points.length && !state.unit.known ? ' · ⚠ 모두 모델 단위' : ''}`);
   openModal(`<h2>정보 점검</h2><p class="muted small">측정에 필요한 정보가 갖춰졌는지 확인합니다. 빨강은 진행 불가, 노랑은 결과에 제한이 있음을 뜻합니다.</p><ul class="checklist">${items.map((x) => `<li><span class="st ${x.st}">${{ ok: '✓', warn: '!', bad: '✕', na: '–' }[x.st]}</span><span class="body"><b>${x.title}</b>${x.body}${x.fix ? `<div class="fix">👉 ${x.fix}</div>` : ''}</span></li>`).join('')}</ul>`);
@@ -784,7 +808,7 @@ function openGcpCalib() {
     const f = { m: 1, cm: 0.01, mm: 0.001 }[$('#gcp-unit').value]; const crs = $('#gcp-crs').value.trim();
     const used = pts.filter((p) => { const v = g[p.name]; return v && [v.x, v.y, v.z].every((q) => Number.isFinite(q)); });
     if (used.length < 2) { showError('E10', `실제 좌표(X·Y·Z 모두)가 입력된 점이 ${used.length}개입니다. 2개 이상 필요합니다.`); return; }
-    const P = used.map((p) => p.p.clone()), Q = used.map((p) => new THREE.Vector3(g[p.name].x * f, g[p.name].y * f, g[p.name].z * f));
+    const P = used.map((p) => origCoord(p.p)), Q = used.map((p) => new THREE.Vector3(g[p.name].x * f, g[p.name].y * f, g[p.name].z * f));
     const r = similarityFromPairs(P, Q); if (!(r.s > 0) || !Number.isFinite(r.s)) { showError('E10', '같은 위치의 점이 있거나 좌표가 잘못되었습니다.'); return; }
     const resRows = used.map((p, k) => `<tr><td>${p.name}</td><td class="num">${r.residuals[k].toFixed(3)} m</td></tr>`).join('');
     $('#gcp-result').innerHTML = `<h3>결과 (${used.length}점, ${r.mode === 'similarity' ? '축척 + 회전 + 이동' : '축척만 — 점이 2개이거나 한 줄 위에 있음'})</h3>
@@ -799,7 +823,7 @@ function openGcpCalib() {
       applyUnitUI(); toast(`<b>기준점 보정 적용</b> 1 u = ${r.s.toPrecision(6)} m${transform ? ' · 좌표가 실제 좌표계로 표시됩니다' : ''}`, 'good');
     };
     $('#gcp-apply').onclick = () => { apply(); closeModal(); };
-    $('#gcp-json').onclick = () => { apply(); download(`${state.file.name}.scale.json`, JSON.stringify({ units: 'model', scale_to_meters: r.s, scale_sigma_rel: state.unit.sigmaRel, transform: state.unit.transform, crs, gcp: used.map((p, k) => ({ point: p.name, model: p.p.toArray(), real_m: Q[k].toArray(), residual_m: r.residuals[k] })), file: { name: state.file.name, size: state.file.size }, generated_by: '3DGS 다시점 거리 측정기', when: new Date().toISOString() }, null, 2), 'application/json'); closeModal(); };
+    $('#gcp-json').onclick = () => { apply(); download(`${state.file.name}.scale.json`, JSON.stringify({ units: 'model', scale_to_meters: r.s, scale_sigma_rel: state.unit.sigmaRel, transform: state.unit.transform, crs, gcp: used.map((p, k) => ({ point: p.name, model: origCoord(p.p).toArray(), real_m: Q[k].toArray(), residual_m: r.residuals[k] })), file: { name: state.file.name, size: state.file.size }, generated_by: '3DGS 다시점 거리 측정기', when: new Date().toISOString() }, null, 2), 'application/json'); closeModal(); };
   };
 }
 function openCalibResult(t, di) {
@@ -823,8 +847,8 @@ function openManualScale() {
 function openExport() {
   if (!state.points.length) { toast('내보낼 측정 결과가 없습니다. 먼저 점을 재세요.', 'warn'); return; }
   openModal(`<h2>내보내기</h2><p class="muted small">단위: ${state.unit.known ? `미터 (${state.unit.source})` : '<b>모델 단위(u)</b> — 축척 정보가 없어 미터 열은 비어 있습니다'}</p><div class="btnrow"><button class="btn primary" id="ex-csv">CSV (점 + 거리)</button><button class="btn" id="ex-json">JSON (공분산·광선 포함)</button><button class="btn" id="ex-png">PNG 스크린샷</button></div>`);
-  $('#ex-csv').onclick = () => { const f = state.unit.known ? state.unit.factor : null; let csv = '﻿type,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs\n'; for (const p of state.points) { const rr = toReal(p.p); csv += `point,${p.id},${p.name},${p.p.x},${p.p.y},${p.p.z},${p.sigma0},${f ? p.p.x * f : ''},${f ? p.p.y * f : ''},${f ? p.p.z * f : ''},${f ? p.sigma0 * f : ''},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ''},${rr ? rr.y : ''},${rr ? rr.z : ''},${rr ? state.unit.crs || '' : ''}\n`; } csv += '\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,unit_source\n'; for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const di = distanceInfo(a, b); csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ''},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ''},"${state.unit.known ? state.unit.source : '축척 정보 없음(모델 단위)'}"\n`; } download(`${state.file.name}.measurements.csv`, csv, 'text/csv'); };
-  $('#ex-json').onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $('#up-label').textContent, points: state.points.map((p) => ({ ...p, p: p.p.toArray(), cov: p.cov.toArray() })), distances: state.dists.map((d) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); const di = a && b ? distanceInfo(a, b) : null; return { a: d.a, b: d.b, dist_model: di?.d, sigma_model: di?.sigma }; }), method: 'Deng & Qin 2026 multi-ray least-squares spatial intersection', when: new Date().toISOString() }, null, 2), 'application/json');
+  $('#ex-csv').onclick = () => { const f = state.unit.known ? state.unit.factor : null; let csv = '﻿type,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs\n'; for (const p of state.points) { const po = origCoord(p.p); const rr = toReal(po); csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ''},${f ? po.y * f : ''},${f ? po.z * f : ''},${f ? p.sigma0 * f : ''},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ''},${rr ? rr.y : ''},${rr ? rr.z : ''},${rr ? state.unit.crs || '' : ''}\n`; } csv += '\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,unit_source\n'; for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const di = distanceInfo(a, b); csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ''},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ''},"${state.unit.known ? state.unit.source : '축척 정보 없음(모델 단위)'}"\n`; } download(`${state.file.name}.measurements.csv`, csv, 'text/csv'); };
+  $('#ex-json').onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $('#up-label').textContent, coord_offset_subtracted_in_viewer: state.coordOffset, points: state.points.map((p) => ({ ...p, p: origCoord(p.p).toArray(), p_viewer: p.p.toArray(), cov: p.cov.toArray() })), distances: state.dists.map((d) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); const di = a && b ? distanceInfo(a, b) : null; return { a: d.a, b: d.b, dist_model: di?.d, sigma_model: di?.sigma }; }), method: 'Deng & Qin 2026 multi-ray least-squares spatial intersection', when: new Date().toISOString() }, null, 2), 'application/json');
   $('#ex-png').onclick = () => { const gl = renderer.domElement; const c = document.createElement('canvas'); c.width = gl.width; c.height = gl.height; const x = c.getContext('2d'); x.drawImage(gl, 0, 0); x.drawImage(overlay, 0, 0, c.width, c.height); c.toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${state.file.name}.measure.png`; a.click(); }); };
 }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); }
@@ -912,7 +936,7 @@ window.__app = {
   setCamera(pos, target, up) { if (up) camera.up.set(...up); camera.position.set(...pos); controls.target.set(...target); controls.update(); renderer.render(scene, camera); },
   project(p) { return project(new THREE.Vector3(...p)); },
   click(px, py) { onMeasureClick(px, py); },
-  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, navAction, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
+  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, navAction, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
   debugAddPoint(xyz, name) { const p = { id: state.nextId++, name: name || `P${state.nextId - 1}`, p: new THREE.Vector3(...xyz), sigma0: 1e-4, cov: new THREE.Matrix3().identity().multiplyScalar(1e-8), n: 5, quality: 'good', pxRms: 0.1, maxAngleDeg: 60, rays: [] }; state.points.push(p); renderResults(); return p; },
   openGcpCalib, setGcp(name, xyz) { state.gcpInputs[name] = { x: xyz[0], y: xyz[1], z: xyz[2] }; }, openChecklist, openCalibWizard, applyManualScale(s) { state.unit = { known: true, factor: s, sigmaRel: 0, source: 'test' }; applyUnitUI(); },
   distanceInfo, intersectRays, render() { renderer.render(scene, camera); drawOverlay(); },
