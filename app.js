@@ -18,7 +18,7 @@ const state = {
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
   rays: [], estimate: null, refPatch: null, autoRotCount: 0,
   points: [], dists: [], geoms: [], selected: new Set(), nextId: 1, nextGeomId: 1,
-  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, viewMode: 'splat', ptSize: 2, cloudColor: 'rgb', pickSplat: false, pickMode: 'cluster', pickRadius: 8, pickHelpSeen: false, dunit: 'auto', labels: true },
+  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, viewMode: 'splat', ptSize: 2, ptMode: 'gauss', ptScale: 0.7, hideBig: true, cloudColor: 'rgb', pickSplat: false, pickMode: 'cluster', pickRadius: 8, pickHelpSeen: false, dunit: 'auto', labels: true },
   autoPivot: null, autoAngleDeg: 0, autoTiltDeg: 0, loupeHiResFailed: false, gcpInputs: {},
   mouse: { x: 0, y: 0, inside: false },
   webgl2: true,
@@ -470,28 +470,51 @@ function parsePlyHeader(buf) {
 }
 // ================================================================== 점군 보기 · 1클릭 직접 선택
 const SH_C0 = 0.28209479177387814;
-function buildCloudFromPly(buf, h) { // 3DGS PLY → {pos Float32Array(N*3), col Uint8Array(N*3), n}
+function buildCloudFromPly(buf, h) { // 3DGS PLY → {pos Float32Array(N*3), col Uint8Array(N*3, sRGB), rad Float32Array(N, 가우시안 반경), n}
   if (!h || h.compressed || h.format !== 'binary_little_endian' || h.order[0] !== 'vertex') return null;
   const v = h.elements.vertex; if (v.props.some((q) => q.type !== 'float' && q.type !== 'float32')) return null;
-  const k = v.props.length, ix = h.names.indexOf('x'), ir = h.names.indexOf('f_dc_0'), io = h.names.indexOf('opacity'); if (ix < 0) return null;
+  const k = v.props.length, ix = h.names.indexOf('x'), ir = h.names.indexOf('f_dc_0'), io = h.names.indexOf('opacity'), is0 = h.names.indexOf('scale_0'); if (ix < 0) return null;
   const aligned = h.headerLength % 4 === 0; const f32 = aligned ? new Float32Array(buf, h.headerLength, v.count * k) : new Float32Array(buf.slice(h.headerLength, h.headerLength + v.count * k * 4));
-  const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3); let n = 0;
+  const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3), rad = new Float32Array(v.count); let n = 0;
   for (let i = 0; i < v.count; i++) { const b = i * k; if (io >= 0 && 1 / (1 + Math.exp(-f32[b + io])) < 0.05) continue; pos[3 * n] = f32[b + ix]; pos[3 * n + 1] = f32[b + ix + 1]; pos[3 * n + 2] = f32[b + ix + 2];
-    if (ir >= 0) for (let c = 0; c < 3; c++) col[3 * n + c] = Math.max(0, Math.min(255, Math.round((0.5 + SH_C0 * f32[b + ir + c]) * 255))); else col[3 * n] = col[3 * n + 1] = col[3 * n + 2] = 200; n++; }
-  return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), n };
+    if (ir >= 0) for (let c = 0; c < 3; c++) col[3 * n + c] = Math.max(0, Math.min(255, Math.round((0.5 + SH_C0 * f32[b + ir + c]) * 255))); else col[3 * n] = col[3 * n + 1] = col[3 * n + 2] = 200;
+    if (is0 >= 0) { const a = Math.exp(f32[b + is0]), b2 = Math.exp(f32[b + is0 + 1]), c2 = h.names.includes('scale_2') ? Math.exp(f32[b + is0 + 2]) : Math.min(a, b2); const srt = [a, b2, c2].sort((x, y) => y - x); rad[n] = Math.sqrt(srt[0] * srt[1]); } else rad[n] = 0; n++; }
+  return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), n };
 }
-function buildCloudFromMesh(mesh) { try { const src = mesh.splats || mesh.packedSplats; const N = src?.numSplats || 0; if (!N || !src.forEachSplat) return null; const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3); let n = 0; src.forEachSplat((i, c, sc, q, op, color) => { if (op < 0.05) return; pos[3 * n] = c.x; pos[3 * n + 1] = c.y; pos[3 * n + 2] = c.z; col[3 * n] = Math.round(color.r * 255); col[3 * n + 1] = Math.round(color.g * 255); col[3 * n + 2] = Math.round(color.b * 255); n++; }); return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), n }; } catch (e) { console.warn('점군 추출 실패', e); return null; } }
+function buildCloudFromMesh(mesh) { try { const src = mesh.splats || mesh.packedSplats; const N = src?.numSplats || 0; if (!N || !src.forEachSplat) return null; const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N); let n = 0; src.forEachSplat((i, c, sc, q, op, color) => { if (op < 0.05) return; pos[3 * n] = c.x; pos[3 * n + 1] = c.y; pos[3 * n + 2] = c.z; col[3 * n] = Math.round(color.r * 255); col[3 * n + 1] = Math.round(color.g * 255); col[3 * n + 2] = Math.round(color.b * 255); const srt = [sc.x, sc.y, sc.z].sort((x, y) => y - x); rad[n] = Math.sqrt(srt[0] * srt[1]); n++; }); return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), n }; } catch (e) { console.warn('점군 추출 실패', e); return null; } }
 function cloudColors(cl) { const m = state.settings.cloudColor; const out = new Uint8Array(cl.n * 3); if (m === 'rgb') return cl.col;
   if (m === 'mono') { out.fill(190); return out; }
   const up = upVec(); let lo = Infinity, hi = -Infinity; const hs = new Float32Array(cl.n); for (let i = 0; i < cl.n; i++) { const hgt = cl.pos[3 * i] * up.x + cl.pos[3 * i + 1] * up.y + cl.pos[3 * i + 2] * up.z; hs[i] = hgt; }
   const sorted = Float32Array.from(hs).sort(); lo = sorted[Math.floor(cl.n * 0.02)]; hi = sorted[Math.floor(cl.n * 0.98)];
   for (let i = 0; i < cl.n; i++) { const t = THREE.MathUtils.clamp((hs[i] - lo) / Math.max(1e-9, hi - lo), 0, 1); const c = new THREE.Color().setHSL(0.7 - 0.7 * t, 0.9, 0.5); out[3 * i] = c.r * 255; out[3 * i + 1] = c.g * 255; out[3 * i + 2] = c.b * 255; } return out; }
+const CLOUD_VS = `
+attribute float rad; varying vec3 vColor;
+uniform float uFocal; uniform float uMode; uniform float uPx; uniform float uScale; uniform float uMinPx; uniform float uMaxPx; uniform float uHideBig; uniform float uBigRad;
+void main() {
+  vColor = color;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float px = uPx;
+  if (uMode > 0.5) { px = 2.0 * rad * uScale * uFocal / max(-mv.z, 1e-4); px = clamp(px, uMinPx, uMaxPx); }
+  if (uHideBig > 0.5 && rad > uBigRad) { px = 0.0; gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; } // 가장 큰 가우시안(잡티·하늘) 숨김
+  gl_PointSize = px; gl_Position = projectionMatrix * mv;
+}`;
+const CLOUD_FS = `
+varying vec3 vColor;
+void main() {
+  vec2 d = gl_PointCoord - 0.5; if (dot(d, d) > 0.25) discard;
+  vec3 lin = pow(vColor, vec3(2.2)); // 파일 색은 sRGB → 선형으로 바꾼 뒤 출력 색공간으로 인코딩 (안 하면 색이 바램)
+  gl_FragColor = vec4(lin, 1.0);
+  #include <colorspace_fragment>
+}`;
+function cloudUniforms(m) { const st = state.settings; const dpr = Math.min(window.devicePixelRatio || 1, 2); m.uniforms.uFocal.value = focalPx() * dpr; m.uniforms.uMode.value = st.ptMode === 'gauss' ? 1 : 0; m.uniforms.uPx.value = st.ptSize * dpr; m.uniforms.uScale.value = st.ptScale; m.uniforms.uMinPx.value = Math.max(1, st.ptSize * 0.5) * dpr; m.uniforms.uMaxPx.value = 24 * dpr; m.uniforms.uHideBig.value = st.hideBig ? 1 : 0; m.uniforms.uBigRad.value = state.cloud?.bigRad ?? 1e30; }
 function rebuildPoints() {
   if (state.points3) { scene.remove(state.points3); state.points3.geometry.dispose(); state.points3.material.dispose(); state.points3 = null; }
   const cl = state.cloud; if (!cl) return;
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(cl.pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(cloudColors(cl), 3, true));
-  const m = new THREE.PointsMaterial({ size: state.settings.ptSize * Math.min(window.devicePixelRatio || 1, 2), sizeAttenuation: false, vertexColors: true }); m.depthWrite = true;
-  state.points3 = new THREE.Points(g, m); state.points3.frustumCulled = false; scene.add(state.points3); applyViewMode();
+  if (cl.rad && cl.bigRad == null) { const sorted = Float32Array.from(cl.rad).sort(); cl.bigRad = sorted[Math.floor(cl.n * 0.99)]; } // 반경 상위 1 % 기준값
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(cl.pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(cloudColors(cl), 3, true)); g.setAttribute('rad', new THREE.BufferAttribute(cl.rad || new Float32Array(cl.n), 1));
+  const m = new THREE.ShaderMaterial({ vertexShader: CLOUD_VS, fragmentShader: CLOUD_FS, vertexColors: true, uniforms: { uFocal: { value: 1000 }, uMode: { value: 1 }, uPx: { value: 2 }, uScale: { value: 1 }, uMinPx: { value: 1 }, uMaxPx: { value: 24 }, uHideBig: { value: 1 }, uBigRad: { value: 1e30 } }, depthTest: true, depthWrite: true });
+  cloudUniforms(m);
+  state.points3 = new THREE.Points(g, m); state.points3.frustumCulled = false; state.points3.onBeforeRender = () => cloudUniforms(m); scene.add(state.points3); applyViewMode();
 }
 function applyViewMode() {
   const mode = state.settings.viewMode; const names = { splat: '스플랫', cloud: '점군', both: '겹침' };
@@ -1057,7 +1080,7 @@ $('#live-autorot').onclick = () => setSetting('autoRotate', !state.settings.auto
 $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => (b.onclick = () => setSetting('loupeSize', b.dataset.ls)));
 $('#set-autorot').onchange = (e) => setSetting('autoRotate', e.target.checked);
 $('#set-navpad').onchange = (e) => setSetting('navpad', e.target.checked);
-$('#set-ptsize').oninput = (e) => { setSetting('ptSize', +e.target.value); if (state.points3) state.points3.material.size = state.settings.ptSize * Math.min(window.devicePixelRatio || 1, 2); }; $('#set-cloudcolor').onchange = (e) => { setSetting('cloudColor', e.target.value); rebuildPoints(); }; $('#set-pick-splat').onchange = (e) => setSetting('pickSplat', e.target.checked); $$('input[name=pickmode]').forEach((r) => (r.onchange = (e) => setSetting('pickMode', e.target.value))); $('#set-pickr').oninput = (e) => setSetting('pickRadius', +e.target.value); $('#btn-pick-help').onclick = openPickHelp;
+$('#set-ptsize').oninput = (e) => setSetting('ptSize', +e.target.value); $('#set-ptmode').onchange = (e) => setSetting('ptMode', e.target.value); $('#set-hidebig').onchange = (e) => setSetting('hideBig', e.target.checked); $('#set-ptscale').oninput = (e) => setSetting('ptScale', +e.target.value); $('#set-cloudcolor').onchange = (e) => { setSetting('cloudColor', e.target.value); rebuildPoints(); }; $('#set-pick-splat').onchange = (e) => setSetting('pickSplat', e.target.checked); $$('input[name=pickmode]').forEach((r) => (r.onchange = (e) => setSetting('pickMode', e.target.value))); $('#set-pickr').oninput = (e) => setSetting('pickRadius', +e.target.value); $('#btn-pick-help').onclick = openPickHelp;
 $('#btn-view').onclick = (e) => { e.stopPropagation(); $('#btn-view').parentElement.classList.toggle('open'); }; document.addEventListener('click', () => $('#btn-view').parentElement.classList.remove('open')); $$('#menu-view button').forEach((b) => (b.onclick = () => { setSetting('viewMode', b.dataset.view); applyViewMode(); })); $('#set-navstep').onchange = (e) => setSetting('navStep', Math.max(1, Math.min(90, +e.target.value || 15))); $('#btn-navpad').onclick = () => setSetting('navpad', !state.settings.navpad);
 initNavpad();
 $$('#live-rotpat, #set-rotpat').forEach((el) => (el.onchange = (e) => setSetting('rotPattern', e.target.value))); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.onchange = (e) => setSetting('rotAxis', e.target.value))); $$('#live-rotstep, #set-rotstep').forEach((el) => (el.onchange = (e) => setSetting('rotStep', Math.max(0, Math.min(180, +e.target.value || 0))))); $('#set-hires').onchange = (e) => { state.loupeHiResFailed = false; setSetting('loupeHiRes', e.target.checked); }; $('#btn-undo').onclick = undoRay; $('#btn-worst').onclick = removeWorst; $('#btn-finish').onclick = () => finishPoint(); $('#btn-cancel').onclick = () => { if (state.rays.length) { cancelPoint(); toast('현재 점 측정을 취소했습니다.', 'info', 3000); } else endTask(); };
@@ -1080,7 +1103,7 @@ function syncSettingsUI() {
   $('#set-n').value = st.n; $('#set-snap').checked = st.snap; $('#set-refine').checked = st.refine; $('#set-loupe').checked = st.loupe; $('#set-labels').checked = st.labels; st.zoom = Math.max(2, Math.min(5, Math.round(st.zoom * 2) / 2)); $('#set-zoom').value = st.zoom; $('#zoom-label').textContent = `${st.zoom}×`; $('#live-zoom').value = String(st.zoom); $('#set-dunit').value = st.dunit;
   $('#set-hires').checked = st.loupeHiRes; $('#set-autorot').checked = st.autoRotate;
   $('#set-navpad').checked = st.navpad; $('#set-navstep').value = st.navStep;
-  $('#set-ptsize').value = st.ptSize; $('#ptsize-label').textContent = `${st.ptSize} px`; $('#set-cloudcolor').value = st.cloudColor; $('#set-pick-splat').checked = st.pickSplat; $$('input[name=pickmode]').forEach((r) => (r.checked = r.value === st.pickMode)); $('#opt-cluster').classList.toggle('on', st.pickMode === 'cluster'); $('#opt-nearest').classList.toggle('on', st.pickMode === 'nearest'); $('#set-pickr').value = st.pickRadius; $('#pickr-label').textContent = `${st.pickRadius} px`; $('#navpad').hidden = !(st.navpad && state.mesh); $('#btn-navpad').classList.toggle('active', st.navpad);
+  $('#set-ptsize').value = st.ptSize; $('#ptsize-label').textContent = `${st.ptSize} px`; $('#set-ptmode').value = st.ptMode; $('#set-hidebig').checked = st.hideBig; $('#set-ptscale').value = st.ptScale; $('#ptscale-label').textContent = `${st.ptScale}×`; $('#row-ptsize').style.opacity = st.ptMode === 'gauss' ? '.55' : '1'; $('#row-ptscale').style.opacity = st.ptMode === 'gauss' ? '1' : '.55'; $('#set-cloudcolor').value = st.cloudColor; $('#set-pick-splat').checked = st.pickSplat; $$('input[name=pickmode]').forEach((r) => (r.checked = r.value === st.pickMode)); $('#opt-cluster').classList.toggle('on', st.pickMode === 'cluster'); $('#opt-nearest').classList.toggle('on', st.pickMode === 'nearest'); $('#set-pickr').value = st.pickRadius; $('#pickr-label').textContent = `${st.pickRadius} px`; $('#navpad').hidden = !(st.navpad && state.mesh); $('#btn-navpad').classList.toggle('active', st.navpad);
   $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => b.classList.toggle('on', b.dataset.ls === st.loupeSize));
   const t = $('#live-autorot'); t.textContent = st.autoRotate ? '켬' : '끔'; t.classList.toggle('on', st.autoRotate);
   $$('#live-rotpat, #set-rotpat').forEach((el) => (el.value = st.rotPattern)); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.value = st.rotAxis)); $$('#live-rotstep, #set-rotstep').forEach((el) => { el.value = st.rotStep > 0 ? st.rotStep : ''; el.placeholder = `자동 ${autoStepDeg().toFixed(0)}°`; });

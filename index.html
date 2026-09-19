@@ -191,7 +191,10 @@
       <label class="field">거리 표시 단위 <select id="set-dunit"><option value="auto">자동 (m / cm)</option><option value="m">m</option><option value="cm">cm</option><option value="mm">mm</option></select></label>
       <label class="field check"><input id="set-labels" type="checkbox" checked> 화면에 점·거리 라벨 표시</label>
       <h4>점군 보기 · 1클릭 직접 선택 <button id="btn-pick-help" class="btn small ghost" title="두 방식의 차이 설명">? 설명</button></h4>
-      <label class="field">점군 점 크기 <span><input id="set-ptsize" type="range" min="1" max="6" step="0.5" value="2"> <span id="ptsize-label">2 px</span></span></label>
+      <label class="field">점군 점 표현 <select id="set-ptmode"><option value="gauss">가우시안 크기 (조밀, 권장)</option><option value="px">고정 크기 (px)</option></select></label>
+      <label class="field" id="row-ptscale">가우시안 크기 배율 <span><input id="set-ptscale" type="range" min="0.3" max="3" step="0.1" value="0.7"> <span id="ptscale-label">0.7×</span> <span class="muted small">(작게 → 성김·정밀, 크게 → 빈틈 없음)</span></span></label>
+      <label class="field check"><input id="set-hidebig" type="checkbox" checked> 가장 큰 가우시안 1 % 숨기기 <span class="muted small">(하늘·잡티처럼 거대한 원판이 세부를 가리는 것을 방지)</span></label>
+      <label class="field" id="row-ptsize">고정 점 크기 <span><input id="set-ptsize" type="range" min="1" max="6" step="0.5" value="2"> <span id="ptsize-label">2 px</span></span></label>
       <label class="field">점군 색 <select id="set-cloudcolor"><option value="rgb">파일 색(RGB)</option><option value="height">높이</option><option value="mono">단색</option></select></label>
       <label class="field check"><input id="set-pick-splat" type="checkbox"> 스플랫 화면에서도 1클릭 직접 선택 <span class="muted small">(끄면 스플랫 화면은 다시점 클릭, 점군 화면은 항상 1클릭)</span></label>
       <div class="small muted" style="margin:6px 0 2px">1클릭 선택 시 좌표를 정하는 방식</div>
