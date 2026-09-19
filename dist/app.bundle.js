@@ -56872,7 +56872,7 @@ void main() {
     dists: [],
     selected: /* @__PURE__ */ new Set(),
     nextId: 1,
-    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 4, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, dunit: "auto", labels: true },
+    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, dunit: "auto", labels: true },
     autoPivot: null,
     autoAngleDeg: 0,
     autoTiltDeg: 0,
@@ -58762,6 +58762,7 @@ void main() {
   };
   function saveSettings() {
     try {
+      state.settings.v = 2;
       localStorage.setItem("gsm.settings", JSON.stringify(state.settings));
     } catch (_) {
     }
@@ -58802,7 +58803,13 @@ void main() {
   }
   try {
     const saved = JSON.parse(localStorage.getItem("gsm.settings") || "null");
-    if (saved && typeof saved === "object") Object.assign(state.settings, saved);
+    if (saved && typeof saved === "object") {
+      Object.assign(state.settings, saved);
+      if (!saved.v || saved.v < 2) {
+        state.settings.zoom = 2;
+        state.settings.v = 2;
+      }
+    }
   } catch (_) {
   }
   $("#set-n").onchange = (e) => {
@@ -58880,7 +58887,7 @@ void main() {
       else if (e.key === "ArrowLeft") autoOrbit(-st, "h");
       else if (e.key === "ArrowUp") autoOrbit(Math.min(st, 45), "v");
       else autoOrbit(-Math.min(st, 45), "v");
-    } else if (e.key === "[" || e.key === "]") setSetting("zoom", Math.max(2, Math.min(8, state.settings.zoom + (e.key === "]" ? 1 : -1))));
+    } else if (e.key === "[" || e.key === "]") setSetting("zoom", Math.max(1, Math.min(8, state.settings.zoom + (e.key === "]" ? 0.5 : -0.5))));
   });
   function resetAll(keepFile) {
     state.points = [];
