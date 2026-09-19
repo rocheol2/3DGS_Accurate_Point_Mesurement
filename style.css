@@ -167,3 +167,17 @@ a{color:var(--accent)}
 .mini{padding:2px 4px;font-size:12px;max-width:150px}
 input.mini{width:54px}
 .quick select,.quick input{vertical-align:middle}
+
+/* floating navigation pad */
+#navpad{position:absolute;left:14px;bottom:calc(var(--coach-h) + 14px);z-index:19;width:236px;background:#111a2ef2;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #000a;user-select:none;touch-action:none}
+.nav-head{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);cursor:move;font-size:13px;font-weight:700}
+.nav-hbtn button{background:none;border:none;color:var(--muted);font-size:13px;padding:0 4px;cursor:pointer}
+.nav-body{display:flex;gap:8px;padding:8px}
+#navpad.folded .nav-body,#navpad.folded .nav-foot{display:none}
+.nav-group{display:flex;flex-direction:column;align-items:center;gap:4px}
+.nav-title{font-size:11px;color:var(--muted)}
+.nav-grid3{display:grid;grid-template-columns:repeat(3,30px);grid-template-rows:repeat(3,30px);gap:3px}
+.nav-col{display:flex;flex-direction:column;gap:3px}
+#navpad button[data-nav]{width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:14px;cursor:pointer;padding:0}
+#navpad button[data-nav]:hover{background:#22304f}#navpad button[data-nav]:active{background:var(--accent);color:#000}
+.nav-foot{font-size:10px;padding:0 10px 7px;line-height:1.4}
