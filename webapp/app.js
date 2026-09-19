@@ -18,7 +18,7 @@ const state = {
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
   rays: [], estimate: null, refPatch: null, autoRotCount: 0,
   points: [], dists: [], selected: new Set(), nextId: 1,
-  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 4, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, dunit: 'auto', labels: true },
+  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 4, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, dunit: 'auto', labels: true },
   autoPivot: null, autoAngleDeg: 0, autoTiltDeg: 0, loupeHiResFailed: false, gcpInputs: {},
   mouse: { x: 0, y: 0, inside: false },
   webgl2: true,
@@ -182,6 +182,12 @@ function surfaceHitAlongRay(o, d, pxRadius = 10) {
 function onWheel(e) {
   if (!state.mesh) return; e.preventDefault();
   const r = renderer.domElement.getBoundingClientRect(); const px = e.clientX - r.left, py = e.clientY - r.top;
+  let delta = e.deltaY; if (e.deltaMode === 1) delta *= 16; else if (e.deltaMode === 2) delta *= 400;
+  zoomAt(px, py, delta);
+}
+// 화면 점 (px,py) 아래 표면을 향해 delta<0 이면 접근, >0 이면 후퇴 (휠 한 칸 ≈ 100)
+function zoomAt(px, py, delta) {
+  if (!state.mesh) return;
   const ray = rayFromPixel(px, py); const o = camera.position.clone();
   const viewDir = camera.getWorldDirection(new THREE.Vector3());
   const tTarget = Math.max(1e-3, controls.target.clone().sub(o).dot(viewDir));
@@ -193,7 +199,6 @@ function onWheel(e) {
   // 이동 방향: 표면 점 군집의 중심을 향해 (커서 픽셀 정수 반올림 때문에 광선이 물체를 0.5 px 비껴가도, 보고 있던 표면 점이 화면에 고정됨)
   const dirMove = hit ? hit.point.clone().sub(o).normalize() : ray.d.clone();
   const tHit = hit ? hit.t : tTarget;                      // 표면을 못 찾으면 현재 궤도 중심 깊이
-  let delta = e.deltaY; if (e.deltaMode === 1) delta *= 16; else if (e.deltaMode === 2) delta *= 400;
   const k = Math.min(3, Math.abs(delta) / 100);            // 휠 한 칸(≈100) 기준 배수
   const R = state.bounds?.radius || 1; const minGap = Math.max(R * 0.002, 1e-4);
   let move;
@@ -205,6 +210,57 @@ function onWheel(e) {
   const depth = Math.max(minGap, hitPoint.sub(camera.position).dot(viewDir));
   controls.target.copy(camera.position).addScaledVector(viewDir, depth); // 궤도 중심을 표면 깊이에 두어 회전이 그 점을 중심으로
   controls.update();
+}
+// ---------------- 플로팅 조작 패널 (마우스 없이 회전·확대·이동)
+function navOrbit(dhDeg, dvDeg) { // 궤도 중심(controls.target)을 기준으로 화면 좌우/상하 회전
+  if (!state.mesh) return;
+  const pivot = controls.target.clone(); const off = camera.position.clone().sub(pivot);
+  const up = camera.up.clone().normalize();
+  if (dhDeg) off.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize(), dhDeg * DEG));
+  if (dvDeg) {
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    const cand = off.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(right, -dvDeg * DEG));
+    const phi = Math.acos(THREE.MathUtils.clamp(cand.clone().normalize().dot(up), -1, 1)) / DEG;
+    if (phi > 4 && phi < 176) off.copy(cand);
+  }
+  camera.position.copy(pivot).add(off); camera.lookAt(pivot); controls.update();
+}
+function navPan(dxFrac, dyFrac) { // 화면 기준 평행이동 (궤도 중심 거리의 비율)
+  if (!state.mesh) return;
+  const dist = Math.max(1e-3, camera.position.distanceTo(controls.target));
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize(); const upv = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+  const d = right.multiplyScalar(dxFrac * dist).add(upv.multiplyScalar(dyFrac * dist));
+  camera.position.add(d); controls.target.add(d); controls.update();
+}
+function navZoom(dir) { const { w, h } = viewSize(); zoomAt(w / 2, h / 2, dir > 0 ? -100 : 100); }
+function navAction(act, fine = false) {
+  const rot = fine ? 2 : (state.settings.navStep || 15), pan = fine ? 0.02 : 0.12;
+  switch (act) {
+    case 'rl': navOrbit(-rot, 0); break; case 'rr': navOrbit(rot, 0); break; case 'ru': navOrbit(0, rot); break; case 'rd': navOrbit(0, -rot); break;
+    case 'zi': navZoom(fine ? 0.4 : 1); break; case 'zo': navZoom(fine ? -0.4 : -1); break;
+    case 'pl': navPan(-pan, 0); break; case 'pr': navPan(pan, 0); break; case 'pu': navPan(0, pan); break; case 'pd': navPan(0, -pan); break;
+    case 'home': frameAll(); break; case 'focus': { const rp = refPoint(); if (rp) moveTarget(rp); break; }
+  }
+}
+function initNavpad() {
+  const pad = $('#navpad'); if (!pad) return;
+  let timer = null, held = null;
+  const stop = () => { if (timer) { clearInterval(timer); timer = null; } held = null; };
+  pad.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest('[data-nav]'); if (!b) return; e.preventDefault(); b.setPointerCapture?.(e.pointerId);
+    const act = b.dataset.nav; navAction(act);
+    if (['home', 'focus'].includes(act)) return;
+    held = act; let n = 0; timer = setInterval(() => { n++; if (n > 6) navAction(held, true); }, 45); // 0.3초 이상 누르면 연속 미세 동작
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => pad.addEventListener(ev, stop));
+  // 헤더 드래그로 위치 이동
+  const head = pad.querySelector('.nav-head'); let drag = null;
+  head.addEventListener('pointerdown', (e) => { if (e.target.closest('button')) return; drag = { x: e.clientX, y: e.clientY, l: pad.offsetLeft, t: pad.offsetTop }; head.setPointerCapture(e.pointerId); });
+  head.addEventListener('pointermove', (e) => { if (!drag) return; const host = glHost.getBoundingClientRect(); pad.style.left = Math.max(0, Math.min(host.width - pad.offsetWidth, drag.l + e.clientX - drag.x)) + 'px'; pad.style.top = Math.max(0, Math.min(host.height - pad.offsetHeight, drag.t + e.clientY - drag.y)) + 'px'; pad.style.bottom = 'auto'; });
+  head.addEventListener('pointerup', () => { if (drag) { try { localStorage.setItem('gsm.navpadPos', JSON.stringify({ left: pad.style.left, top: pad.style.top })); } catch (_) {} } drag = null; });
+  $('#nav-fold').onclick = () => { pad.classList.toggle('folded'); $('#nav-fold').textContent = pad.classList.contains('folded') ? '▸' : '▾'; };
+  $('#nav-close').onclick = () => setSetting('navpad', false);
+  try { const pos = JSON.parse(localStorage.getItem('gsm.navpadPos') || 'null'); if (pos && pos.left) { pad.style.left = pos.left; pad.style.top = pos.top; pad.style.bottom = 'auto'; } } catch (_) {}
 }
 function refPoint() {
   if (state.estimate) return state.estimate.p.clone();
@@ -401,7 +457,8 @@ async function loadFiles(fileList) {
   resolveUnits(header, sidecar);
   // UI
   $('#loading').hidden = true; $('#dropzone').classList.add('hidden');
-  ['#btn-point', '#btn-dist', '#btn-scale', '#btn-export', '#btn-up', '#btn-home'].forEach((s) => ($(s).disabled = false));
+  ['#btn-point', '#btn-dist', '#btn-scale', '#btn-export', '#btn-up', '#btn-home', '#btn-navpad'].forEach((s) => ($(s).disabled = false));
+  $('#navpad').hidden = !state.settings.navpad;
   glHost.classList.remove('measuring');
   coach('', `<b>${main.name}</b> 열림 (가우시안 ${state.file.count ? state.file.count.toLocaleString() : '?'}개). <b>● 점 측정</b> 또는 <b>↔ 거리 측정</b>을 누르고, 휠로 잴 곳을 확대하세요.`);
   updateCheckDot(); renderResults();
@@ -797,6 +854,8 @@ $('#btn-autorot').onclick = () => autoRotate();
 $('#live-autorot').onclick = () => setSetting('autoRotate', !state.settings.autoRotate);
 $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => (b.onclick = () => setSetting('loupeSize', b.dataset.ls)));
 $('#set-autorot').onchange = (e) => setSetting('autoRotate', e.target.checked);
+$('#set-navpad').onchange = (e) => setSetting('navpad', e.target.checked); $('#set-navstep').onchange = (e) => setSetting('navStep', Math.max(1, Math.min(90, +e.target.value || 15))); $('#btn-navpad').onclick = () => setSetting('navpad', !state.settings.navpad);
+initNavpad();
 $$('#live-rotpat, #set-rotpat').forEach((el) => (el.onchange = (e) => setSetting('rotPattern', e.target.value))); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.onchange = (e) => setSetting('rotAxis', e.target.value))); $$('#live-rotstep, #set-rotstep').forEach((el) => (el.onchange = (e) => setSetting('rotStep', Math.max(0, Math.min(180, +e.target.value || 0))))); $('#set-hires').onchange = (e) => { state.loupeHiResFailed = false; setSetting('loupeHiRes', e.target.checked); }; $('#btn-undo').onclick = undoRay; $('#btn-worst').onclick = removeWorst; $('#btn-finish').onclick = () => finishPoint(); $('#btn-cancel').onclick = () => { if (state.rays.length) { cancelPoint(); toast('현재 점 측정을 취소했습니다.', 'info', 3000); } else endTask(); };
 $('#ray-table').addEventListener('click', (e) => { if (e.target.closest('[data-undo]')) undoRay(); });
 $('#pt-table').addEventListener('change', (e) => { const cb = e.target.closest('[data-sel]'); if (!cb) return; const id = +cb.dataset.sel; if (cb.checked) { if (state.selected.size >= 2) { const first = [...state.selected][0]; state.selected.delete(first); } state.selected.add(id); } else state.selected.delete(id); renderResults(); });
@@ -811,6 +870,7 @@ function syncSettingsUI() {
   const st = state.settings;
   $('#set-n').value = st.n; $('#set-snap').checked = st.snap; $('#set-refine').checked = st.refine; $('#set-loupe').checked = st.loupe; $('#set-labels').checked = st.labels; $('#set-zoom').value = st.zoom; $('#zoom-label').textContent = `${st.zoom}×`; $('#set-dunit').value = st.dunit;
   $('#set-hires').checked = st.loupeHiRes; $('#set-autorot').checked = st.autoRotate;
+  $('#set-navpad').checked = st.navpad; $('#set-navstep').value = st.navStep; $('#navpad').hidden = !(st.navpad && state.mesh); $('#btn-navpad').classList.toggle('active', st.navpad);
   $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => b.classList.toggle('on', b.dataset.ls === st.loupeSize));
   const t = $('#live-autorot'); t.textContent = st.autoRotate ? '켬' : '끔'; t.classList.toggle('on', st.autoRotate);
   $$('#live-rotpat, #set-rotpat').forEach((el) => (el.value = st.rotPattern)); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.value = st.rotAxis)); $$('#live-rotstep, #set-rotstep').forEach((el) => { el.value = st.rotStep > 0 ? st.rotStep : ''; el.placeholder = `자동 ${autoStepDeg().toFixed(0)}°`; });
@@ -852,7 +912,7 @@ window.__app = {
   setCamera(pos, target, up) { if (up) camera.up.set(...up); camera.position.set(...pos); controls.target.set(...target); controls.update(); renderer.render(scene, camera); },
   project(p) { return project(new THREE.Vector3(...p)); },
   click(px, py) { onMeasureClick(px, py); },
-  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
+  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, navAction, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
   debugAddPoint(xyz, name) { const p = { id: state.nextId++, name: name || `P${state.nextId - 1}`, p: new THREE.Vector3(...xyz), sigma0: 1e-4, cov: new THREE.Matrix3().identity().multiplyScalar(1e-8), n: 5, quality: 'good', pxRms: 0.1, maxAngleDeg: 60, rays: [] }; state.points.push(p); renderResults(); return p; },
   openGcpCalib, setGcp(name, xyz) { state.gcpInputs[name] = { x: xyz[0], y: xyz[1], z: xyz[2] }; }, openChecklist, openCalibWizard, applyManualScale(s) { state.unit = { known: true, factor: s, sigmaRel: 0, source: 'test' }; applyUnitUI(); },
   distanceInfo, intersectRays, render() { renderer.render(scene, camera); drawOverlay(); },
