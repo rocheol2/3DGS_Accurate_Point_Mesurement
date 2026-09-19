@@ -18,7 +18,7 @@ const state = {
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
   rays: [], estimate: null, refPatch: null, autoRotCount: 0,
   points: [], dists: [], selected: new Set(), nextId: 1,
-  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 4, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, dunit: 'auto', labels: true },
+  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, dunit: 'auto', labels: true },
   autoPivot: null, autoAngleDeg: 0, autoTiltDeg: 0, loupeHiResFailed: false, gcpInputs: {},
   mouse: { x: 0, y: 0, inside: false },
   webgl2: true,
@@ -888,7 +888,7 @@ $('#dist-table').addEventListener('click', (e) => { const d = e.target.closest('
 $('#btn-dist-sel').onclick = () => { const [a, b] = [...state.selected].map((id) => state.points.find((p) => p.id === id)); if (a && b) { addDistance(a, b); state.selected.clear(); renderResults(); } };
 $('#btn-clear').onclick = () => { if (!state.points.length || confirm('측정한 점과 거리를 모두 지울까요?')) { state.points = []; state.dists = []; state.selected.clear(); renderResults(); } };
 // 설정 (변경 시 브라우저에 저장, 다음 방문에 복원)
-function saveSettings() { try { localStorage.setItem('gsm.settings', JSON.stringify(state.settings)); } catch (_) {} }
+function saveSettings() { try { state.settings.v = 2; localStorage.setItem('gsm.settings', JSON.stringify(state.settings)); } catch (_) {} }
 function setSetting(key, val) { state.settings[key] = val; syncSettingsUI(); saveSettings(); if (state.task) updateMeasureUI(); }
 function syncSettingsUI() {
   const st = state.settings;
@@ -900,7 +900,7 @@ function syncSettingsUI() {
   $$('#live-rotpat, #set-rotpat').forEach((el) => (el.value = st.rotPattern)); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.value = st.rotAxis)); $$('#live-rotstep, #set-rotstep').forEach((el) => { el.value = st.rotStep > 0 ? st.rotStep : ''; el.placeholder = `자동 ${autoStepDeg().toFixed(0)}°`; });
   $('#btn-autorot').title = `측정 중인 점을 중심으로 ${autoStepDeg().toFixed(0)}° 더 돌립니다 (R)`;
 }
-try { const saved = JSON.parse(localStorage.getItem('gsm.settings') || 'null'); if (saved && typeof saved === 'object') Object.assign(state.settings, saved); } catch (_) {}
+try { const saved = JSON.parse(localStorage.getItem('gsm.settings') || 'null'); if (saved && typeof saved === 'object') { Object.assign(state.settings, saved); if (!saved.v || saved.v < 2) { state.settings.zoom = 2; state.settings.v = 2; } } } catch (_) {}
 $('#set-n').onchange = (e) => { setSetting('n', Math.max(2, Math.min(12, +e.target.value || 5))); };
 $('#set-snap').onchange = (e) => setSetting('snap', e.target.checked); $('#set-refine').onchange = (e) => setSetting('refine', e.target.checked); $('#set-loupe').onchange = (e) => setSetting('loupe', e.target.checked); $('#set-labels').onchange = (e) => setSetting('labels', e.target.checked);
 $('#set-zoom').oninput = (e) => setSetting('zoom', +e.target.value); $('#set-dunit').onchange = (e) => { setSetting('dunit', e.target.value); renderResults(); };
@@ -917,7 +917,7 @@ document.addEventListener('pointerdown', (e) => { if (e.target !== renderer?.dom
 document.addEventListener('pointerup', (e) => { if (!down || e.button !== 0) return; const mv = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (mv < 5 && state.task && e.target === renderer.domElement) { const r = renderer.domElement.getBoundingClientRect(); onMeasureClick(e.clientX - r.left, e.clientY - r.top); } });
 document.addEventListener('pointermove', (e) => { if (!renderer) return; const r = renderer.domElement.getBoundingClientRect(); state.mouse.x = e.clientX - r.left; state.mouse.y = e.clientY - r.top; state.mouse.inside = e.target === renderer.domElement; });
 // 키
-document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (e.key === 'Enter') finishPoint(); else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(8, state.settings.zoom + (e.key === ']' ? 1 : -1)))); });
+document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (e.key === 'Enter') finishPoint(); else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(1, Math.min(8, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
 function resetAll(keepFile) { state.points = []; state.dists = []; state.selected.clear(); state.nextId = 1; state.task = null; cancelPoint(false); $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active')); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; renderResults(); }
 function runTour() { document.getElementById('app').classList.add('tour-active'); startTour(TOUR_STEPS, { onDone: () => { document.getElementById('app').classList.remove('tour-active'); try { localStorage.setItem('gsm.tourSeen', '1'); } catch (_) {} } }); }
 
