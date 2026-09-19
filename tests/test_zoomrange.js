@@ -1,0 +1,20 @@
+const puppeteer = require('puppeteer-core'); const fs = require('fs'); const path = require('path'); const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+(async () => {
+  const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1400,900'] });
+  const p = await b.newPage(); await p.setViewport({ width: 1400, height: 900 });
+  await p.goto('file:///home/rocheol2/storage/Cesium/webapp/dist/3DGS_거리측정기_단일파일_조작메뉴.html#notour', { waitUntil: 'load' }); await p.waitForFunction(() => window.__app);
+  await p.evaluate(() => localStorage.setItem('gsm.settings', JSON.stringify({ zoom: 8, v: 2 }))); await p.reload({ waitUntil: 'load' }); await p.waitForFunction(() => window.__app);
+  const a = await p.evaluate(() => ({ zoom: window.__state.settings.zoom, min: document.querySelector('#set-zoom').min, max: document.querySelector('#set-zoom').max, opts: document.querySelectorAll('#live-zoom option').length }));
+  console.log('저장값 8 → 범위 보정:', JSON.stringify(a));
+  const buf = fs.readFileSync(path.join(__dirname, 'cube_m.ply'));
+  await p.evaluate(async (b64) => { const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); await window.__app.loadArrayBuffer('cube_m.ply', u8.buffer); }, buf.toString('base64')); await sleep(500);
+  await p.evaluate(() => window.__app.startTask('point'));
+  await p.select('#live-zoom', '3.5'); const z1 = await p.evaluate(() => ({ z: window.__state.settings.zoom, slider: document.querySelector('#set-zoom').value, label: document.querySelector('#zoom-label').textContent }));
+  for (let i = 0; i < 6; i++) await p.keyboard.press(']'); const z2 = await p.evaluate(() => window.__state.settings.zoom);
+  for (let i = 0; i < 12; i++) await p.keyboard.press('['); const z3 = await p.evaluate(() => ({ z: window.__state.settings.zoom, live: document.querySelector('#live-zoom').value }));
+  const s = await p.evaluate(() => window.__app.project([2, 2, 2])); const r = await p.evaluate(() => { const q = document.querySelector('#gl canvas').getBoundingClientRect(); return { l: q.left, t: q.top }; });
+  await p.select('#live-zoom', '5'); await p.mouse.move(r.l + s.x, r.t + s.y); await sleep(400);
+  const info = await p.evaluate(() => document.querySelector('#loupe-info').textContent); await p.screenshot({ path: 'shots/26_loupe_5x.png' });
+  console.log(`패널 선택 3.5 → ${JSON.stringify(z1)} | ] 6회 → ${z2} (최대 5) | [ 12회 → ${JSON.stringify(z3)} (최소 2) | 5배 확대창: ${info}`);
+  console.log('RESULT:', a.zoom === 5 && a.min === '2' && a.max === '5' && a.opts === 7 && z1.z === 3.5 && z2 === 5 && z3.z === 2 && z3.live === '2' && info.startsWith('5×') ? 'PASS' : 'FAIL'); await b.close();
+})();

@@ -58780,8 +58780,10 @@ void main() {
     $("#set-refine").checked = st.refine;
     $("#set-loupe").checked = st.loupe;
     $("#set-labels").checked = st.labels;
+    st.zoom = Math.max(2, Math.min(5, Math.round(st.zoom * 2) / 2));
     $("#set-zoom").value = st.zoom;
     $("#zoom-label").textContent = `${st.zoom}\xD7`;
+    $("#live-zoom").value = String(st.zoom);
     $("#set-dunit").value = st.dunit;
     $("#set-hires").checked = st.loupeHiRes;
     $("#set-autorot").checked = st.autoRotate;
@@ -58820,6 +58822,7 @@ void main() {
   $("#set-loupe").onchange = (e) => setSetting("loupe", e.target.checked);
   $("#set-labels").onchange = (e) => setSetting("labels", e.target.checked);
   $("#set-zoom").oninput = (e) => setSetting("zoom", +e.target.value);
+  $("#live-zoom").onchange = (e) => setSetting("zoom", +e.target.value);
   $("#set-dunit").onchange = (e) => {
     setSetting("dunit", e.target.value);
     renderResults();
@@ -58887,7 +58890,7 @@ void main() {
       else if (e.key === "ArrowLeft") autoOrbit(-st, "h");
       else if (e.key === "ArrowUp") autoOrbit(Math.min(st, 45), "v");
       else autoOrbit(-Math.min(st, 45), "v");
-    } else if (e.key === "[" || e.key === "]") setSetting("zoom", Math.max(1, Math.min(8, state.settings.zoom + (e.key === "]" ? 0.5 : -0.5))));
+    } else if (e.key === "[" || e.key === "]") setSetting("zoom", Math.max(2, Math.min(5, state.settings.zoom + (e.key === "]" ? 0.5 : -0.5))));
   });
   function resetAll(keepFile) {
     state.points = [];
