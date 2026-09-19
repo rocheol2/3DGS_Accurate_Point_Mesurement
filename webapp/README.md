@@ -8,7 +8,7 @@
 | 방법 | 어떻게 |
 |---|---|
 | 온라인 | https://rocheol2.github.io/3DGS_Accurate_Point_Mesurement/ |
-| 더블클릭 (오프라인) | `dist/3DGS_거리측정기_단일파일_조작메뉴.html` (최신 · 모든 기능 포함). 이전 판 `…_방향제어.html`, `…_자동회전.html`, `…_단일파일.html` 도 남겨 둠 |
+| 더블클릭 (오프라인) | **`dist/3DGS_거리측정기_단일파일_점군직접선택.html`** (2026-09-19 최신 · 점군 보기·1클릭 직접 선택·정밀화까지 모든 기능 포함). 이전 판 `…_조작메뉴.html`, `…_방향제어.html`, `…_자동회전.html`, `…_단일파일.html` 도 남겨 둠 |
 | 로컬 서버 | 저장소 루트에서 `tools/start_webapp.sh` → `http://localhost:8000/` |
 
 `webapp/index.html` 을 직접 더블클릭하면 브라우저가 스크립트를 차단해 동작하지 않습니다(화면에 안내가 뜹니다). Chrome 권장(WebGL2).
