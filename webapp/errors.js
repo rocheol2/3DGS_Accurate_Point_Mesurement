@@ -77,4 +77,5 @@ export const QUALITY = {
   good: { label: '좋음', desc: '광선 잔차 RMS ≤ 1.5 px, 각도 ≥ 20°' },
   fair: { label: '보통', desc: '잔차 ≤ 4 px 또는 각도 10~20°' },
   poor: { label: '나쁨', desc: '잔차 > 4 px 또는 각도 < 10°' },
+  pick: { label: '직접선택', desc: '점군에서 1클릭으로 고른 점 — 가우시안 중심의 흩어짐(스플랫 두께)만큼 불확실. σ는 군집 퍼짐. 정밀도가 필요하면 [정밀화]로 다시점 측정' },
 };
