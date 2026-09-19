@@ -56877,7 +56877,7 @@ void main() {
     selected: /* @__PURE__ */ new Set(),
     nextId: 1,
     nextGeomId: 1,
-    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 2, cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, dunit: "auto", labels: true },
+    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 2, ptMode: "gauss", ptScale: 0.7, hideBig: true, cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, dunit: "auto", labels: true },
     autoPivot: null,
     autoAngleDeg: 0,
     autoTiltDeg: 0,
@@ -57717,11 +57717,11 @@ void main() {
     if (!h || h.compressed || h.format !== "binary_little_endian" || h.order[0] !== "vertex") return null;
     const v = h.elements.vertex;
     if (v.props.some((q) => q.type !== "float" && q.type !== "float32")) return null;
-    const k = v.props.length, ix = h.names.indexOf("x"), ir = h.names.indexOf("f_dc_0"), io = h.names.indexOf("opacity");
+    const k = v.props.length, ix = h.names.indexOf("x"), ir = h.names.indexOf("f_dc_0"), io = h.names.indexOf("opacity"), is0 = h.names.indexOf("scale_0");
     if (ix < 0) return null;
     const aligned = h.headerLength % 4 === 0;
     const f32 = aligned ? new Float32Array(buf, h.headerLength, v.count * k) : new Float32Array(buf.slice(h.headerLength, h.headerLength + v.count * k * 4));
-    const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3);
+    const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3), rad = new Float32Array(v.count);
     let n = 0;
     for (let i = 0; i < v.count; i++) {
       const b = i * k;
@@ -57731,16 +57731,21 @@ void main() {
       pos[3 * n + 2] = f32[b + ix + 2];
       if (ir >= 0) for (let c = 0; c < 3; c++) col[3 * n + c] = Math.max(0, Math.min(255, Math.round((0.5 + SH_C0 * f32[b + ir + c]) * 255)));
       else col[3 * n] = col[3 * n + 1] = col[3 * n + 2] = 200;
+      if (is0 >= 0) {
+        const a = Math.exp(f32[b + is0]), b22 = Math.exp(f32[b + is0 + 1]), c2 = h.names.includes("scale_2") ? Math.exp(f32[b + is0 + 2]) : Math.min(a, b22);
+        const srt = [a, b22, c2].sort((x, y) => y - x);
+        rad[n] = Math.sqrt(srt[0] * srt[1]);
+      } else rad[n] = 0;
       n++;
     }
-    return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), n };
+    return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), n };
   }
   function buildCloudFromMesh(mesh) {
     try {
       const src = mesh.splats || mesh.packedSplats;
       const N = src?.numSplats || 0;
       if (!N || !src.forEachSplat) return null;
-      const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3);
+      const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N);
       let n = 0;
       src.forEachSplat((i, c, sc, q, op, color) => {
         if (op < 0.05) return;
@@ -57750,9 +57755,11 @@ void main() {
         col[3 * n] = Math.round(color.r * 255);
         col[3 * n + 1] = Math.round(color.g * 255);
         col[3 * n + 2] = Math.round(color.b * 255);
+        const srt = [sc.x, sc.y, sc.z].sort((x, y) => y - x);
+        rad[n] = Math.sqrt(srt[0] * srt[1]);
         n++;
       });
-      return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), n };
+      return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), n };
     } catch (e) {
       console.warn("\uC810\uAD70 \uCD94\uCD9C \uC2E4\uD328", e);
       return null;
@@ -57785,6 +57792,37 @@ void main() {
     }
     return out;
   }
+  var CLOUD_VS = `
+attribute float rad; varying vec3 vColor;
+uniform float uFocal; uniform float uMode; uniform float uPx; uniform float uScale; uniform float uMinPx; uniform float uMaxPx; uniform float uHideBig; uniform float uBigRad;
+void main() {
+  vColor = color;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float px = uPx;
+  if (uMode > 0.5) { px = 2.0 * rad * uScale * uFocal / max(-mv.z, 1e-4); px = clamp(px, uMinPx, uMaxPx); }
+  if (uHideBig > 0.5 && rad > uBigRad) { px = 0.0; gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; } // \uAC00\uC7A5 \uD070 \uAC00\uC6B0\uC2DC\uC548(\uC7A1\uD2F0\xB7\uD558\uB298) \uC228\uAE40
+  gl_PointSize = px; gl_Position = projectionMatrix * mv;
+}`;
+  var CLOUD_FS = `
+varying vec3 vColor;
+void main() {
+  vec2 d = gl_PointCoord - 0.5; if (dot(d, d) > 0.25) discard;
+  vec3 lin = pow(vColor, vec3(2.2)); // \uD30C\uC77C \uC0C9\uC740 sRGB \u2192 \uC120\uD615\uC73C\uB85C \uBC14\uAFBC \uB4A4 \uCD9C\uB825 \uC0C9\uACF5\uAC04\uC73C\uB85C \uC778\uCF54\uB529 (\uC548 \uD558\uBA74 \uC0C9\uC774 \uBC14\uB7A8)
+  gl_FragColor = vec4(lin, 1.0);
+  #include <colorspace_fragment>
+}`;
+  function cloudUniforms(m) {
+    const st = state.settings;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    m.uniforms.uFocal.value = focalPx() * dpr;
+    m.uniforms.uMode.value = st.ptMode === "gauss" ? 1 : 0;
+    m.uniforms.uPx.value = st.ptSize * dpr;
+    m.uniforms.uScale.value = st.ptScale;
+    m.uniforms.uMinPx.value = Math.max(1, st.ptSize * 0.5) * dpr;
+    m.uniforms.uMaxPx.value = 24 * dpr;
+    m.uniforms.uHideBig.value = st.hideBig ? 1 : 0;
+    m.uniforms.uBigRad.value = state.cloud?.bigRad ?? 1e30;
+  }
   function rebuildPoints() {
     if (state.points3) {
       scene.remove(state.points3);
@@ -57794,13 +57832,19 @@ void main() {
     }
     const cl = state.cloud;
     if (!cl) return;
+    if (cl.rad && cl.bigRad == null) {
+      const sorted = Float32Array.from(cl.rad).sort();
+      cl.bigRad = sorted[Math.floor(cl.n * 0.99)];
+    }
     const g = new BufferGeometry();
     g.setAttribute("position", new BufferAttribute(cl.pos, 3));
     g.setAttribute("color", new BufferAttribute(cloudColors(cl), 3, true));
-    const m = new PointsMaterial({ size: state.settings.ptSize * Math.min(window.devicePixelRatio || 1, 2), sizeAttenuation: false, vertexColors: true });
-    m.depthWrite = true;
+    g.setAttribute("rad", new BufferAttribute(cl.rad || new Float32Array(cl.n), 1));
+    const m = new ShaderMaterial({ vertexShader: CLOUD_VS, fragmentShader: CLOUD_FS, vertexColors: true, uniforms: { uFocal: { value: 1e3 }, uMode: { value: 1 }, uPx: { value: 2 }, uScale: { value: 1 }, uMinPx: { value: 1 }, uMaxPx: { value: 24 }, uHideBig: { value: 1 }, uBigRad: { value: 1e30 } }, depthTest: true, depthWrite: true });
+    cloudUniforms(m);
     state.points3 = new Points(g, m);
     state.points3.frustumCulled = false;
+    state.points3.onBeforeRender = () => cloudUniforms(m);
     scene.add(state.points3);
     applyViewMode();
   }
@@ -59246,10 +59290,10 @@ void main() {
   $$("#live-loupe-size button, #set-loupe-size button").forEach((b) => b.onclick = () => setSetting("loupeSize", b.dataset.ls));
   $("#set-autorot").onchange = (e) => setSetting("autoRotate", e.target.checked);
   $("#set-navpad").onchange = (e) => setSetting("navpad", e.target.checked);
-  $("#set-ptsize").oninput = (e) => {
-    setSetting("ptSize", +e.target.value);
-    if (state.points3) state.points3.material.size = state.settings.ptSize * Math.min(window.devicePixelRatio || 1, 2);
-  };
+  $("#set-ptsize").oninput = (e) => setSetting("ptSize", +e.target.value);
+  $("#set-ptmode").onchange = (e) => setSetting("ptMode", e.target.value);
+  $("#set-hidebig").onchange = (e) => setSetting("hideBig", e.target.checked);
+  $("#set-ptscale").oninput = (e) => setSetting("ptScale", +e.target.value);
   $("#set-cloudcolor").onchange = (e) => {
     setSetting("cloudColor", e.target.value);
     rebuildPoints();
@@ -59388,6 +59432,12 @@ void main() {
     $("#set-navstep").value = st.navStep;
     $("#set-ptsize").value = st.ptSize;
     $("#ptsize-label").textContent = `${st.ptSize} px`;
+    $("#set-ptmode").value = st.ptMode;
+    $("#set-hidebig").checked = st.hideBig;
+    $("#set-ptscale").value = st.ptScale;
+    $("#ptscale-label").textContent = `${st.ptScale}\xD7`;
+    $("#row-ptsize").style.opacity = st.ptMode === "gauss" ? ".55" : "1";
+    $("#row-ptscale").style.opacity = st.ptMode === "gauss" ? "1" : ".55";
     $("#set-cloudcolor").value = st.cloudColor;
     $("#set-pick-splat").checked = st.pickSplat;
     $$("input[name=pickmode]").forEach((r) => r.checked = r.value === st.pickMode);
