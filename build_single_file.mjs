@@ -20,9 +20,9 @@ html = html.replace(/<script type="importmap">[\s\S]*?<\/script>\s*/m, '');
 html = html.replace('<link rel="stylesheet" href="style.css">', () => `<style>\n${css}\n</style>`); // 함수 치환: 치환문자열의 $$ 해석 방지
 html = html.replace(/<script>\s*\/\/ index\.html 을 더블클릭[\s\S]*?<\/script>\s*/m, ''); // file:// 안내는 단일 파일에선 불필요
 html = html.replace('<script type="module" src="app.js"></script>', () => `<script>\n${bundle.replace(/<\/script>/g, () => '<\\/script>')}\n</script>`);
-html = html.replace('<title>3DGS 다시점 거리 측정기</title>', () => '<title>3DGS 다시점 거리 측정기 (단일 파일 · 조작메뉴)</title>');
+html = html.replace('<title>3DGS 다시점 거리 측정기</title>', () => '<title>3DGS 다시점 거리 측정기 (단일 파일 · 점군직접선택)</title>');
 html = html.replace('<a href="help.html" target="_blank">전체 사용법 열기</a>', '<a href="help.html" target="_blank">전체 사용법 열기</a> · 단일 파일 버전 (더블클릭으로 열림)');
-const OUT = process.argv[2] || 'dist/3DGS_거리측정기_단일파일_조작메뉴.html'; // 기본: 조작메뉴 판. 이전 판들은 덮어쓰지 않음
+const OUT = process.argv[2] || 'dist/3DGS_거리측정기_단일파일_점군직접선택.html'; // 기본: 점군직접선택 판. 이전 판들은 덮어쓰지 않음
 writeFileSync(OUT, html);
 // 2) help.html 의 모듈 스크립트(오류 표)를 정적 HTML 로 굽기 → file:// 에서도 표가 보임
 let help = readFileSync('help.html', 'utf8');
