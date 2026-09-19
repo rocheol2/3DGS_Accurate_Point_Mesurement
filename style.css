@@ -65,7 +65,7 @@ kbd{font:600 10px/1 ui-monospace,monospace;background:#0008;border:1px solid #ff
 #angle-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
 .estimate{background:var(--panel2);border-radius:8px;padding:8px;margin:8px 0}
 .badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:var(--muted);color:#000}
-.badge.good{background:var(--good)} .badge.fair{background:var(--fair)} .badge.poor{background:var(--poor);color:#fff}
+.badge.good{background:var(--good)} .badge.fair{background:var(--fair)} .badge.poor{background:var(--poor);color:#fff} .badge.pick{background:#a78bfa;color:#000}
 table{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}
 th{text-align:left;color:var(--muted);font-weight:600;padding:4px 4px;border-bottom:1px solid var(--line)}
 td{padding:4px 4px;border-bottom:1px solid #1d2740;vertical-align:middle}
@@ -181,3 +181,8 @@ input.mini{width:54px}
 #navpad button[data-nav]{width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:14px;cursor:pointer;padding:0}
 #navpad button[data-nav]:hover{background:#22304f}#navpad button[data-nav]:active{background:var(--accent);color:#000}
 .nav-foot{font-size:10px;padding:0 10px 7px;line-height:1.4}
+
+.opt{display:block;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin:4px 0;font-size:13px}
+.opt.on{border-color:var(--accent);background:#0e2a3a}
+.opt .d{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.cmp td,.cmp th{font-size:12px;vertical-align:top}

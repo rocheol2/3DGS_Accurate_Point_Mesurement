@@ -56695,7 +56695,8 @@ void main() {
   var QUALITY = {
     good: { label: "\uC88B\uC74C", desc: "\uAD11\uC120 \uC794\uCC28 RMS \u2264 1.5 px, \uAC01\uB3C4 \u2265 20\xB0" },
     fair: { label: "\uBCF4\uD1B5", desc: "\uC794\uCC28 \u2264 4 px \uB610\uB294 \uAC01\uB3C4 10~20\xB0" },
-    poor: { label: "\uB098\uC068", desc: "\uC794\uCC28 > 4 px \uB610\uB294 \uAC01\uB3C4 < 10\xB0" }
+    poor: { label: "\uB098\uC068", desc: "\uC794\uCC28 > 4 px \uB610\uB294 \uAC01\uB3C4 < 10\xB0" },
+    pick: { label: "\uC9C1\uC811\uC120\uD0DD", desc: "\uC810\uAD70\uC5D0\uC11C 1\uD074\uB9AD\uC73C\uB85C \uACE0\uB978 \uC810 \u2014 \uAC00\uC6B0\uC2DC\uC548 \uC911\uC2EC\uC758 \uD769\uC5B4\uC9D0(\uC2A4\uD50C\uB7AB \uB450\uAED8)\uB9CC\uD07C \uBD88\uD655\uC2E4. \u03C3\uB294 \uAD70\uC9D1 \uD37C\uC9D0. \uC815\uBC00\uB3C4\uAC00 \uD544\uC694\uD558\uBA74 [\uC815\uBC00\uD654]\uB85C \uB2E4\uC2DC\uC810 \uCE21\uC815" }
   };
 
   // tour.js
@@ -56860,6 +56861,8 @@ void main() {
     bounds: null,
     centers: null,
     coordOffset: null,
+    cloud: null,
+    points3: null,
     unit: { known: false, factor: 1, sigmaRel: 0, source: "" },
     upSource: null,
     task: null,
@@ -56874,7 +56877,7 @@ void main() {
     selected: /* @__PURE__ */ new Set(),
     nextId: 1,
     nextGeomId: 1,
-    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, dunit: "auto", labels: true },
+    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 2, cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, dunit: "auto", labels: true },
     autoPivot: null,
     autoAngleDeg: 0,
     autoTiltDeg: 0,
@@ -56953,7 +56956,7 @@ void main() {
     tickAnimations();
     controls.update();
     if (state.bounds) updateClipPlanes();
-    if (state.mesh) renderer.render(scene, camera);
+    if (state.mesh || state.points3) renderer.render(scene, camera);
     drawOverlay();
     updateLoupe();
   }
@@ -57709,6 +57712,208 @@ void main() {
     h.upAxis = um ? (um[1] || "+") + um[2] : null;
     return h;
   }
+  var SH_C0 = 0.28209479177387814;
+  function buildCloudFromPly(buf, h) {
+    if (!h || h.compressed || h.format !== "binary_little_endian" || h.order[0] !== "vertex") return null;
+    const v = h.elements.vertex;
+    if (v.props.some((q) => q.type !== "float" && q.type !== "float32")) return null;
+    const k = v.props.length, ix = h.names.indexOf("x"), ir = h.names.indexOf("f_dc_0"), io = h.names.indexOf("opacity");
+    if (ix < 0) return null;
+    const aligned = h.headerLength % 4 === 0;
+    const f32 = aligned ? new Float32Array(buf, h.headerLength, v.count * k) : new Float32Array(buf.slice(h.headerLength, h.headerLength + v.count * k * 4));
+    const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3);
+    let n = 0;
+    for (let i = 0; i < v.count; i++) {
+      const b = i * k;
+      if (io >= 0 && 1 / (1 + Math.exp(-f32[b + io])) < 0.05) continue;
+      pos[3 * n] = f32[b + ix];
+      pos[3 * n + 1] = f32[b + ix + 1];
+      pos[3 * n + 2] = f32[b + ix + 2];
+      if (ir >= 0) for (let c = 0; c < 3; c++) col[3 * n + c] = Math.max(0, Math.min(255, Math.round((0.5 + SH_C0 * f32[b + ir + c]) * 255)));
+      else col[3 * n] = col[3 * n + 1] = col[3 * n + 2] = 200;
+      n++;
+    }
+    return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), n };
+  }
+  function buildCloudFromMesh(mesh) {
+    try {
+      const src = mesh.splats || mesh.packedSplats;
+      const N = src?.numSplats || 0;
+      if (!N || !src.forEachSplat) return null;
+      const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3);
+      let n = 0;
+      src.forEachSplat((i, c, sc, q, op, color) => {
+        if (op < 0.05) return;
+        pos[3 * n] = c.x;
+        pos[3 * n + 1] = c.y;
+        pos[3 * n + 2] = c.z;
+        col[3 * n] = Math.round(color.r * 255);
+        col[3 * n + 1] = Math.round(color.g * 255);
+        col[3 * n + 2] = Math.round(color.b * 255);
+        n++;
+      });
+      return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), n };
+    } catch (e) {
+      console.warn("\uC810\uAD70 \uCD94\uCD9C \uC2E4\uD328", e);
+      return null;
+    }
+  }
+  function cloudColors(cl) {
+    const m = state.settings.cloudColor;
+    const out = new Uint8Array(cl.n * 3);
+    if (m === "rgb") return cl.col;
+    if (m === "mono") {
+      out.fill(190);
+      return out;
+    }
+    const up = upVec();
+    let lo = Infinity, hi = -Infinity;
+    const hs = new Float32Array(cl.n);
+    for (let i = 0; i < cl.n; i++) {
+      const hgt = cl.pos[3 * i] * up.x + cl.pos[3 * i + 1] * up.y + cl.pos[3 * i + 2] * up.z;
+      hs[i] = hgt;
+    }
+    const sorted = Float32Array.from(hs).sort();
+    lo = sorted[Math.floor(cl.n * 0.02)];
+    hi = sorted[Math.floor(cl.n * 0.98)];
+    for (let i = 0; i < cl.n; i++) {
+      const t = MathUtils.clamp((hs[i] - lo) / Math.max(1e-9, hi - lo), 0, 1);
+      const c = new Color().setHSL(0.7 - 0.7 * t, 0.9, 0.5);
+      out[3 * i] = c.r * 255;
+      out[3 * i + 1] = c.g * 255;
+      out[3 * i + 2] = c.b * 255;
+    }
+    return out;
+  }
+  function rebuildPoints() {
+    if (state.points3) {
+      scene.remove(state.points3);
+      state.points3.geometry.dispose();
+      state.points3.material.dispose();
+      state.points3 = null;
+    }
+    const cl = state.cloud;
+    if (!cl) return;
+    const g = new BufferGeometry();
+    g.setAttribute("position", new BufferAttribute(cl.pos, 3));
+    g.setAttribute("color", new BufferAttribute(cloudColors(cl), 3, true));
+    const m = new PointsMaterial({ size: state.settings.ptSize * Math.min(window.devicePixelRatio || 1, 2), sizeAttenuation: false, vertexColors: true });
+    m.depthWrite = true;
+    state.points3 = new Points(g, m);
+    state.points3.frustumCulled = false;
+    scene.add(state.points3);
+    applyViewMode();
+  }
+  function applyViewMode() {
+    const mode = state.settings.viewMode;
+    const names = { splat: "\uC2A4\uD50C\uB7AB", cloud: "\uC810\uAD70", both: "\uACB9\uCE68" };
+    if (state.mesh) state.mesh.visible = mode !== "cloud" || !state.points3;
+    if (state.points3) state.points3.visible = mode !== "splat";
+    $("#view-label").textContent = names[mode] || mode;
+    $$("#menu-view button").forEach((b) => b.classList.toggle("on", b.dataset.view === mode));
+    if (mode !== "splat" && !state.points3 && state.mesh) toast("\uC774 \uD30C\uC77C\uC5D0\uC11C\uB294 \uC810\uAD70\uC744 \uB9CC\uB4E4 \uC218 \uC5C6\uC5B4 \uC2A4\uD50C\uB7AB\uC73C\uB85C \uD45C\uC2DC\uD569\uB2C8\uB2E4.", "warn", 4e3);
+  }
+  function directPickEnabled() {
+    return state.settings.viewMode !== "splat" ? !!state.cloud : state.settings.pickSplat && !!state.cloud;
+  }
+  function directPick(px2, py2) {
+    const cl = state.cloud;
+    if (!cl) return null;
+    const ray = rayFromPixel(px2, py2);
+    const o = ray.o, d = ray.d;
+    const f = focalPx();
+    for (let rad = state.settings.pickRadius; rad <= 40; rad *= 2) {
+      const tanA = rad / f;
+      const hits = [];
+      for (let i = 0; i < cl.n; i++) {
+        const vx = cl.pos[3 * i] - o.x, vy = cl.pos[3 * i + 1] - o.y, vz = cl.pos[3 * i + 2] - o.z;
+        const t = vx * d.x + vy * d.y + vz * d.z;
+        if (t <= 1e-6) continue;
+        const perp2 = vx * vx + vy * vy + vz * vz - t * t;
+        const lim = t * tanA;
+        if (perp2 < lim * lim) hits.push({ t, i, ang: Math.sqrt(Math.max(0, perp2)) / t });
+      }
+      if (!hits.length) continue;
+      if (state.settings.pickMode === "nearest") {
+        let b = hits[0];
+        for (const h of hits) if (h.ang < b.ang) b = h;
+        return { p: new Vector3(cl.pos[3 * b.i], cl.pos[3 * b.i + 1], cl.pos[3 * b.i + 2]), sigma: 0, n: 1, mode: "nearest", radius: rad };
+      }
+      hits.sort((a, b) => a.t - b.t);
+      const K = Math.max(3, Math.floor(hits.length * 0.03));
+      let s0 = -1;
+      for (let a = 0; a + K - 1 < hits.length; a++) {
+        if (hits[a + K - 1].t <= hits[a].t * 1.12) {
+          s0 = a;
+          break;
+        }
+      }
+      if (s0 < 0) {
+        if (hits.length < 3) {
+          const b = hits[0];
+          return { p: new Vector3(cl.pos[3 * b.i], cl.pos[3 * b.i + 1], cl.pos[3 * b.i + 2]), sigma: 0, n: 1, mode: "cluster(\uB2E8\uC77C)", radius: rad };
+        }
+        s0 = 0;
+      }
+      const tEnd = hits[s0].t * 1.12;
+      const mem = hits.filter((h, idx) => idx >= s0 && h.t <= tEnd);
+      const xs = mem.map((h) => cl.pos[3 * h.i]), ys = mem.map((h) => cl.pos[3 * h.i + 1]), zs = mem.map((h) => cl.pos[3 * h.i + 2]);
+      const med = (arr) => {
+        const a2 = Float64Array.from(arr).sort();
+        return a2[Math.floor(a2.length / 2)];
+      };
+      const p = new Vector3(med(xs), med(ys), med(zs));
+      let ss = 0;
+      for (const h of mem) ss += (cl.pos[3 * h.i] - p.x) ** 2 + (cl.pos[3 * h.i + 1] - p.y) ** 2 + (cl.pos[3 * h.i + 2] - p.z) ** 2;
+      return { p, sigma: Math.sqrt(ss / mem.length / 3), n: mem.length, mode: "cluster", radius: rad };
+    }
+    return null;
+  }
+  function openPickHelp() {
+    openModal(`<h2>1\uD074\uB9AD \uC9C1\uC811 \uC120\uD0DD \u2014 \uB450 \uBC29\uC2DD\uC758 \uCC28\uC774</h2>
+  <p class="small">3DGS\uC758 \uAC00\uC6B0\uC2DC\uC548\uC740 \uD45C\uBA74 \uC704\uC758 \uC810\uC774 \uC544\uB2C8\uB77C <b>\uD45C\uBA74 \uADFC\uCC98\uC5D0 \uB450\uAED8\uB97C \uAC00\uC9C0\uACE0 \uD769\uC5B4\uC9C4 \uD0C0\uC6D0</b>\uB4E4\uC785\uB2C8\uB2E4. \uD55C \uD45C\uBA74\uC758 \uC911\uC2EC\uC810\uB4E4\uC740 \uBCF4\uD1B5 \uC218 cm~\uC218\uC2ED cm \uB450\uAED8\uB85C \uD37C\uC838 \uC788\uACE0 \uC55E\uB4A4\uC5D0 \uBC18\uD22C\uBA85 \uC7A1\uD2F0(floater)\uAC00 \uB5A0 \uC788\uC2B5\uB2C8\uB2E4. \uADF8\uB798\uC11C "\uC5B4\uB290 \uC810\uC744 \uC88C\uD45C\uB85C \uC0BC\uB290\uB0D0"\uC5D0 \uB530\uB77C \uACB0\uACFC\uAC00 \uB2EC\uB77C\uC9D1\uB2C8\uB2E4. \uC774 \uBC29\uC2DD\uC740 \uB17C\uBB38\uC774 \uB2E4\uC2DC\uC810 \uBC29\uBC95\uBCF4\uB2E4 \uBD80\uC815\uD655\uD558\uB2E4\uACE0 \uC9C0\uC801\uD55C "\uC810\uAD70/\uBA54\uC2DC \uC9C1\uC811 \uCC0D\uAE30"\uC5D0 \uD574\uB2F9\uD558\uBBC0\uB85C, \uBE60\uB978 \uCE21\uC815\uC6A9\uC73C\uB85C \uC4F0\uACE0 \uC815\uBC00\uB3C4\uAC00 \uD544\uC694\uD558\uBA74 <b>[\uC815\uBC00\uD654]</b>(\uB2E4\uC2DC\uC810 \uD074\uB9AD)\uB85C \uC774\uC5B4\uAC00\uC138\uC694.</p>
+  <table class="cmp"><tr><th>\uC0C1\uD669</th><th>\uAC00\uC7A5 \uAC00\uAE4C\uC6B4 \uC810 \uD558\uB098</th><th>\uC55E\uCABD \uAD70\uC9D1 \uC911\uC559\uAC12 (\uAD8C\uC7A5\xB7\uAE30\uBCF8)</th></tr>
+  <tr><td>\uD3C9\uD3C9\uD55C \uBCBD\xB7\uBC14\uB2E5</td><td>\uD45C\uBA74 \uC55E\uB4A4\uB85C \uD284 \uC810 \uD558\uB098\uAC00 \uAC78\uB824 \uC624\uCC28\uAC00 \uC2A4\uD50C\uB7AB \uB450\uAED8\uB9CC\uD07C \uBB34\uC791\uC704\uB85C \uC0DD\uAE40</td><td>\uC5EC\uB7EC \uC810\uC758 \uC911\uC559\uAC12\uC774\uB77C \uD769\uC5B4\uC9D0\uC774 \uD3C9\uADE0\uB418\uC5B4 \uC548\uC815\uC801</td></tr>
+  <tr><td>\uC55E\uC5D0 \uC7A1\uD2F0\uAC00 \uB5A0 \uC788\uC74C</td><td>\uC7A1\uD2F0\uB97C \uADF8\uB300\uB85C \uCC0D\uC74C(\uC218 m \uD288 \uC218 \uC788\uC74C)</td><td>1~2\uAC1C\uC9DC\uB9AC \uC678\uD1A8\uC774\uB294 \uBB34\uC2DC\uD558\uACE0 \uB4A4\uC758 \uC9C4\uC9DC \uD45C\uBA74 \uBB34\uB9AC\uB97C \uD0DD\uD568</td></tr>
+  <tr><td>\uAC00\uB294 \uAE30\uB465\xB7\uBAA8\uC11C\uB9AC\xB7\uD45C\uC9C0\uD310 \uB05D</td><td>\uCEE4\uC11C\uAC00 \uC815\uD655\uD558\uBA74 \uADF8 \uC810\uC744 \uCC0D\uC5B4 <b>\uBFB0\uC871\uD55C \uD2B9\uC9D5\uC810\uC5D0 \uC720\uB9AC</b></td><td>\uC6D0\uBFD4 \uC548\uC5D0 \uBC30\uACBD \uC810\uC774 \uC11E\uC774\uBA74 \uC911\uC559\uAC12\uC774 \uB4A4\uB85C \uB04C\uB9B4 \uC218 \uC788\uC74C \u2192 \uC6D0\uBFD4 \uBC18\uACBD\uC744 \uC791\uAC8C</td></tr>
+  <tr><td>\uC7AC\uD604\uC131(\uAC19\uC740 \uACF3 \uB450 \uBC88 \uD074\uB9AD)</td><td>\uCEE4\uC11C 1 px \uCC28\uC774\uB85C \uB2E4\uB978 \uC810\uC774 \uC7A1\uD600 \uAC12\uC774 \uD754\uB4E4\uB9BC</td><td>\uAC70\uC758 \uAC19\uC740 \uAC12</td></tr>
+  <tr><td>\uBD88\uD655\uB3C4(\u03C3) \uD45C\uC2DC</td><td>\uC810 \uD558\uB098\uB77C \uC54C \uC218 \uC5C6\uC74C(0\uC73C\uB85C \uD45C\uC2DC)</td><td>\uAD70\uC9D1\uC758 \uD37C\uC9D0\uC744 \u03C3\uB85C \uD45C\uC2DC</td></tr></table>
+  <p class="small"><b>\uAD8C\uC7A5</b>: \uAE30\uBCF8\uC740 \uAD70\uC9D1 \uC911\uC559\uAC12, \uBFB0\uC871\uD55C \uD2B9\uC9D5\uC810\uC744 \uCC0D\uC744 \uB54C\uB9CC "\uAC00\uC7A5 \uAC00\uAE4C\uC6B4 \uC810 \uD558\uB098"\uB85C \uBC14\uAFB8\uACE0, \uAC00\uB294 \uAD6C\uC870\uBB3C\uC5D0\uC11C\uB294 \uCEE4\uC11C \uC6D0\uBFD4 \uBC18\uACBD\uC744 3~5 px \uB85C \uC904\uC774\uC138\uC694. \uC5B4\uB290 \uCABD\uC774\uB4E0 \uACB0\uACFC\uC5D0\uB294 <span class="badge pick">\uC9C1\uC811\uC120\uD0DD</span> \uBC30\uC9C0\uAC00 \uBD99\uC2B5\uB2C8\uB2E4. \uCE21\uC815 \uC911 <b>Shift+\uD074\uB9AD</b>\uC740 \uD56D\uC0C1 \uB2E4\uC2DC\uC810 \uAD11\uC120(\uC815\uBC00)\uC785\uB2C8\uB2E4.</p>
+  <div class="btnrow"><button class="btn primary" id="pick-help-ok">\uC54C\uACA0\uC2B5\uB2C8\uB2E4</button><button class="btn" id="pick-help-set">\uC124\uC815\uC5D0\uC11C \uBC29\uC2DD \uBC14\uAFB8\uAE30</button></div>`);
+    $("#pick-help-ok").onclick = closeModal;
+    $("#pick-help-set").onclick = () => {
+      closeModal();
+      showTab("settings");
+    };
+  }
+  function addPickedPoint(px2, py2) {
+    const r = directPick(px2, py2);
+    if (!r) {
+      toast("\uCEE4\uC11C \uC544\uB798\uC5D0\uC11C \uC810\uAD70 \uC810\uC744 \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uBAA8\uB378 \uC704\uB97C \uD074\uB9AD\uD558\uAC70\uB098 \uC6D0\uBFD4 \uBC18\uACBD\uC744 \uD0A4\uC6B0\uC138\uC694.", "warn", 3500);
+      return false;
+    }
+    const pt = { id: state.nextId++, name: `P${state.nextId - 1}`, p: r.p, sigma0: r.sigma, cov: new Matrix3().identity().multiplyScalar(Math.max(r.sigma, 1e-4) ** 2), n: r.n, quality: "pick", method: "pick", pickMode: r.mode, pxRms: NaN, maxAngleDeg: 0, rays: [] };
+    state.points.push(pt);
+    const t = state.task;
+    t.pts.push(pt);
+    toast(`<b>${pt.name} \uC9C1\uC811 \uC120\uD0DD</b> ${fmtCoord(pt.p)} \xB7 \uAD70\uC9D1 ${r.n}\uC810 \xB7 \u03C3 ${fmtLen(r.sigma)} <span class="badge pick">\uC9C1\uC811\uC120\uD0DD</span><br><span class="muted small">\uBC29\uC2DD: ${r.mode === "nearest" ? "\uAC00\uC7A5 \uAC00\uAE4C\uC6B4 \uC810 \uD558\uB098" : "\uC55E\uCABD \uAD70\uC9D1 \uC911\uC559\uAC12"} \xB7 \uC815\uBC00\uB3C4\uAC00 \uD544\uC694\uD558\uBA74 \uACB0\uACFC \uD45C\uC758 [\uC815\uBC00\uD654]</span>`, "info", 6e3);
+    if (!state.settings.pickHelpSeen) {
+      setSetting("pickHelpSeen", true);
+      openPickHelp();
+    }
+    taskPointAdded(t);
+    renderResults();
+    updateCheckDot();
+    return true;
+  }
+  function startRefine(id) {
+    const pt = state.points.find((q) => q.id === id);
+    if (!pt) return;
+    startTask("point", { refineId: id });
+    state.autoPivot = pt.p.clone();
+    moveTarget(pt.p, 300);
+    toast(`<b>${pt.name} \uC815\uBC00\uD654</b> \u2014 \uAC19\uC740 \uC810\uC744 \uC5EC\uB7EC \uAC01\uB3C4\uC5D0\uC11C ${state.settings.n}\uD68C \uD074\uB9AD\uD558\uBA74 \uB2E4\uC2DC\uC810 \uACB0\uACFC\uB85C \uAD50\uCCB4\uB429\uB2C8\uB2E4 (\uC790\uB3D9 \uD68C\uC804\uC774 \uC774 \uC810\uC744 \uC911\uC2EC\uC73C\uB85C \uB3D5\uB2C8\uB2E4).`, "info", 7e3);
+  }
   var PLY_TYPE_SIZE = { char: 1, int8: 1, uchar: 1, uint8: 1, short: 2, int16: 2, ushort: 2, uint16: 2, int: 4, int32: 4, uint: 4, uint32: 4, float: 4, float32: 4, double: 8, float64: 8 };
   function shiftPlyInPlace(buf, h, off) {
     if (h.format !== "binary_little_endian") return false;
@@ -57837,6 +58042,11 @@ void main() {
       }
       state.mesh = null;
     }
+    if (state.points3) {
+      scene.remove(state.points3);
+      state.points3 = null;
+    }
+    state.cloud = null;
     resetAll(true);
     state.coordOffset = null;
     if (header) {
@@ -57888,6 +58098,20 @@ void main() {
     }
     state.bounds = pos ? boundsFromPositions(pos) : { center: new Vector3(), radius: 5 };
     state.centers = pos ? Float32Array.from(pos) : null;
+    state.cloud = (header ? buildCloudFromPly(buf, header) : null) || buildCloudFromMesh(mesh);
+    rebuildPoints();
+    if (state.cloud) state.centers = state.cloud.n > 2e5 ? (() => {
+      const step = Math.ceil(state.cloud.n / 2e5);
+      const out = new Float32Array(Math.ceil(state.cloud.n / step) * 3);
+      let m = 0;
+      for (let i = 0; i < state.cloud.n; i += step) {
+        out[3 * m] = state.cloud.pos[3 * i];
+        out[3 * m + 1] = state.cloud.pos[3 * i + 1];
+        out[3 * m + 2] = state.cloud.pos[3 * i + 2];
+        m++;
+      }
+      return out.subarray(0, m * 3);
+    })() : state.cloud.pos;
     const upFromHeader = header?.upAxis ? { "+z": [0, 0, 1], "-z": [0, 0, -1], "+y": [0, 1, 0], "-y": [0, -1, 0], "+x": [1, 0, 0], "-x": [-1, 0, 0] }[header.upAxis] : null;
     if (upFromHeader) setUp(new Vector3(...upFromHeader), "PLY \uD5E4\uB354(up axis)");
     else if (state.coordOffset) {
@@ -57909,7 +58133,9 @@ void main() {
     resolveUnits(header, sidecar);
     $("#loading").hidden = true;
     $("#dropzone").classList.add("hidden");
-    ["#btn-point", "#btn-dist", "#btn-scale", "#btn-export", "#btn-up", "#btn-home", "#btn-navpad", "#btn-analyze"].forEach((s) => $(s).disabled = false);
+    ["#btn-point", "#btn-dist", "#btn-scale", "#btn-export", "#btn-up", "#btn-home", "#btn-navpad", "#btn-analyze", "#btn-view"].forEach((s) => $(s).disabled = false);
+    $("#btn-view").disabled = false;
+    applyViewMode();
     $("#navpad").hidden = !state.settings.navpad;
     glHost.classList.remove("measuring");
     coach("", `<b>${main.name}</b> \uC5F4\uB9BC (\uAC00\uC6B0\uC2DC\uC548 ${state.file.count ? state.file.count.toLocaleString() : "?"}\uAC1C). <b>\u25CF \uC810 \uCE21\uC815</b> \uB610\uB294 <b>\u2194 \uAC70\uB9AC \uCE21\uC815</b>\uC744 \uB204\uB974\uACE0, \uD720\uB85C \uC7B4 \uACF3\uC744 \uD655\uB300\uD558\uC138\uC694.`);
@@ -58005,6 +58231,13 @@ void main() {
       toast("\uCE74\uBA54\uB77C \uD68C\uC804 \uC911\uC785\uB2C8\uB2E4. \uBA48\uCD98 \uB4A4 \uD074\uB9AD\uD558\uC138\uC694.", "info", 1500);
       return;
     }
+    if (state.rays.length === 0 && directPickEnabled() && !state.forceRay && !state.task.refineId) {
+      const ex = state.task.kind !== "point" ? pickExistingPoint(px2, py2) : null;
+      if (!ex) {
+        addPickedPoint(px2, py2);
+        return;
+      }
+    }
     if (state.rays.length === 0 && state.task.kind !== "point") {
       const ex = pickExistingPoint(px2, py2);
       if (ex) {
@@ -58090,8 +58323,22 @@ void main() {
     }
     if (e.pxRms > 4) showError("E09", `\uC794\uCC28 RMS ${e.pxRms.toFixed(1)} px, \u03C3\u2080 = ${fmtLen(e.sigma0)}`);
     const pt = { id: state.nextId++, name: `P${state.nextId - 1}`, p: e.p.clone(), sigma0: e.sigma0, cov: e.cov.clone(), n: e.n, quality: e.quality, pxRms: e.pxRms, maxAngleDeg: e.maxAngleDeg, rays: state.rays.map((r) => ({ o: r.o.toArray(), d: r.d.toArray(), screen: r.screen, note: r.note })) };
-    state.points.push(pt);
     const t = state.task;
+    if (t.refineId) {
+      const old = state.points.find((q) => q.id === t.refineId);
+      if (old) {
+        Object.assign(old, { p: pt.p, sigma0: pt.sigma0, cov: pt.cov, n: pt.n, quality: pt.quality, method: "multi", pxRms: pt.pxRms, maxAngleDeg: pt.maxAngleDeg, rays: pt.rays, refinedFrom: old.pickMode });
+        state.nextId--;
+        toast(`<b>${old.name} \uC815\uBC00\uD654 \uC644\uB8CC</b> ${fmtCoord(old.p)} \xB7 \u03C3\u2080 ${fmtLen(old.sigma0)} \xB7 \uD488\uC9C8 <span class="badge ${old.quality}">${QUALITY[old.quality].label}</span>`, "good", 6e3);
+        cancelPoint(false);
+        endTask();
+        renderResults();
+        updateCheckDot();
+        return;
+      }
+    }
+    pt.method = "multi";
+    state.points.push(pt);
     t.pts.push(pt);
     toast(`<b>${pt.name} \uD655\uC815</b> ${fmtCoord(pt.p)} \xB7 \u03C3\u2080 ${fmtLen(pt.sigma0)} \xB7 \uD488\uC9C8 <span class="badge ${pt.quality}">${QUALITY[pt.quality].label}</span>`, pt.quality === "poor" ? "warn" : "good", 6e3);
     cancelPoint(false);
@@ -58530,6 +58777,7 @@ void main() {
     const step = `${Math.min(n + 1, N)}/${N}`;
     const lab = taskLabel();
     if (n === 0 && (t.kind === "polyline" || t.kind === "area") && t.pts.length >= (need || 99)) coach(step, `<b>${lab}</b> \u2014 \uC810\uC744 \uB354 \uC7AC\uAC70\uB098, \uCDA9\uBD84\uD558\uBA74 <b>[\u2714 \uC644\uC131]</b>(Enter)\uC744 \uB204\uB974\uC138\uC694. \uAE30\uC874 \uC810 \uB9C8\uCEE4\uB97C \uD074\uB9AD\uD558\uBA74 \uC7AC\uC0AC\uC6A9\uB429\uB2C8\uB2E4.`, `\uC120\uD0DD ${t.pts.length}\uAC1C`);
+    else if (n === 0 && directPickEnabled() && !t.refineId) coach(step, `<b>${lab}</b> \u2014 <b>\uC810\uAD70\uC5D0\uC11C \uD074\uB9AD \uD55C \uBC88</b>\uC73C\uB85C \uC810\uC744 \uACE0\uB985\uB2C8\uB2E4(${state.settings.pickMode === "nearest" ? "\uAC00\uC7A5 \uAC00\uAE4C\uC6B4 \uC810 \uD558\uB098" : "\uC55E\uCABD \uAD70\uC9D1 \uC911\uC559\uAC12"}). \uC815\uBC00\uD558\uAC8C \uC7AC\uB824\uBA74 <b>Shift+\uD074\uB9AD</b>(\uB2E4\uC2DC\uC810 \uAD11\uC120).`, "\uC9C1\uC811\uC120\uD0DD = \uBE60\uB974\uC9C0\uB9CC \uC2A4\uD50C\uB7AB \uB450\uAED8\uB9CC\uD07C \uBD88\uD655\uC2E4");
     else if (n === 0) coach(step, `<b>${lab}</b> \u2014 \uC7B4 \uC810\uC744 <b>\uD720\uB85C \uD06C\uAC8C \uD655\uB300</b>\uD55C \uB4A4 \uC815\uD655\uD788 \uD074\uB9AD\uD558\uC138\uC694. (\uD655\uB300\uCC3D\uC774 \uCEE4\uC11C \uC606\uC5D0 \uB739\uB2C8\uB2E4)${t.kind !== "point" && state.points.length ? " \uC774\uBBF8 \uC7B0 \uC810\uC740 \uB9C8\uCEE4 \uD074\uB9AD\uC73C\uB85C \uC7AC\uC0AC\uC6A9." : ""}`, "\uC624\uB978\uCABD \uB4DC\uB798\uADF8: \uC774\uB3D9 \xB7 \uC67C\uCABD \uB4DC\uB798\uADF8: \uD68C\uC804");
     else if (state.settings.autoRotate) coach(step, `<b>${lab}</b> \u2014 \uCE74\uBA54\uB77C\uAC00 \uC790\uB3D9\uC73C\uB85C \uB3CC\uC544\uAC14\uC2B5\uB2C8\uB2E4. \uD654\uBA74 \uC911\uC559 \uADFC\uCC98(\uB178\uB780 \uC548\uB0B4\uC120\xB7\uCCAD\uB85D \uC6D0)\uC758 <b>\uAC19\uC740 \uC810\uC744 \uD074\uB9AD</b>\uD558\uC138\uC694. ${N - n}\uAC1C \uB0A8\uC74C \xB7 \uB2E4\uC74C \uD68C\uC804: <b>${nextAutoLabel(n + 1) || "\uC5C6\uC74C(\uB9C8\uC9C0\uB9C9)"}</b> \xB7 \uBC29\uD5A5 \uBC14\uAFB8\uAE30: <b>\u2190 \u2192 \u2191 \u2193</b> \uD0A4`, e ? `\u03C3\u2080 ${fmtLen(e.sigma0)} \xB7 \uCD5C\uB300\uAC01 ${e.maxAngleDeg.toFixed(0)}\xB0` : `\uB204\uC801 \uC88C\uC6B0 ${state.autoAngleDeg.toFixed(0)}\xB0 \xB7 \uC0C1\uD558 ${state.autoTiltDeg.toFixed(0)}\xB0`);
     else if (n === 1) coach(step, `<b>${lab}</b> \u2014 \uCE74\uBA54\uB77C\uB97C <b>20\xB0 \uC774\uC0C1 \uB3CC\uB9B0 \uB4A4</b>(\uC67C\uCABD \uB4DC\uB798\uADF8 \uB610\uB294 <b>R</b>) \uB178\uB780 <b>\uC548\uB0B4\uC120 \uC704</b>\uC5D0\uC11C \uAC19\uC740 \uC810\uC744 \uD074\uB9AD\uD558\uC138\uC694.`, "");
@@ -58547,7 +58795,8 @@ void main() {
   function renderResults() {
     $("#results-count").textContent = state.points.length;
     const tb = $("#pt-table tbody");
-    tb.innerHTML = state.points.map((p) => `<tr class="${state.selected.has(p.id) ? "sel" : ""}"><td><input type="checkbox" data-sel="${p.id}" ${state.selected.has(p.id) ? "checked" : ""}></td><td><b>${p.name}</b> <span class="badge ${p.quality}" title="${QUALITY[p.quality].desc}">${QUALITY[p.quality].label}</span></td><td class="mono">${fmtCoord(p.p)}</td><td class="num">${fmtLen(p.sigma0)}</td><td class="num">${p.n}</td><td><button class="xbtn" data-del="${p.id}" title="\uC0AD\uC81C">\u2715</button></td></tr>`).join("") || '<tr><td colspan="6" class="muted">\uC544\uC9C1 \uCE21\uC815\uD55C \uC810\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</td></tr>';
+    tb.innerHTML = state.points.map((p) => `<tr class="${state.selected.has(p.id) ? "sel" : ""}"><td><input type="checkbox" data-sel="${p.id}" ${state.selected.has(p.id) ? "checked" : ""}></td><td><b>${p.name}</b> <span class="badge ${p.quality}" title="${QUALITY[p.quality].desc}">${QUALITY[p.quality].label}</span></td><td class="mono">${fmtCoord(p.p)}</td><td class="num">${fmtLen(p.sigma0)}</td><td class="num">${p.n}</td><td>${p.method === "pick" ? `<button class="btn small" data-refine="${p.id}" title="\uC774 \uC810\uC744 \uB2E4\uC2DC\uC810 \uD074\uB9AD\uC73C\uB85C \uC815\uBC00 \uCE21\uC815">\uC815\uBC00\uD654</button> ` : ""}<button class="xbtn" data-del="${p.id}" title="\uC0AD\uC81C">\u2715</button></td></tr>`).join("") || '<tr><td colspan="6" class="muted">\uC544\uC9C1 \uCE21\uC815\uD55C \uC810\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</td></tr>';
+    $("#pt-legend").hidden = !state.points.length;
     const db = $("#dist-table tbody");
     db.innerHTML = state.dists.map((d, i) => {
       const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b);
@@ -58609,6 +58858,7 @@ void main() {
         it(e.pxRms <= 1.5 ? "ok" : e.pxRms <= 4 ? "warn" : "bad", "\uC9C4\uD589 \uC911 \uCE21\uC815: \uAD11\uC120 \uC794\uCC28", `RMS ${e.pxRms.toFixed(1)} px \xB7 \u03C3\u2080 ${fmtLen(e.sigma0)}`, e.pxRms > 4 ? ERRORS.E09.fix : "");
       }
     }
+    if (state.cloud) it("ok", "\uC810\uAD70", `\uAC00\uC6B0\uC2DC\uC548 \uC911\uC2EC ${state.cloud.n.toLocaleString()}\uC810 \xB7 \uBCF4\uAE30 ${state.settings.viewMode} \xB7 1\uD074\uB9AD \uBC29\uC2DD ${state.settings.pickMode === "nearest" ? "\uAC00\uC7A5 \uAC00\uAE4C\uC6B4 \uC810" : "\uAD70\uC9D1 \uC911\uC559\uAC12"} \xB7 \uC6D0\uBFD4 ${state.settings.pickRadius} px`);
     it(state.points.length ? "ok" : "na", "\uACB0\uACFC", `\uC810 ${state.points.length}\uAC1C \xB7 \uAC70\uB9AC ${state.dists.length}\uAC1C${state.points.length && !state.unit.known ? " \xB7 \u26A0 \uBAA8\uB450 \uBAA8\uB378 \uB2E8\uC704" : ""}`);
     openModal(`<h2>\uC815\uBCF4 \uC810\uAC80</h2><p class="muted small">\uCE21\uC815\uC5D0 \uD544\uC694\uD55C \uC815\uBCF4\uAC00 \uAC16\uCDB0\uC84C\uB294\uC9C0 \uD655\uC778\uD569\uB2C8\uB2E4. \uBE68\uAC15\uC740 \uC9C4\uD589 \uBD88\uAC00, \uB178\uB791\uC740 \uACB0\uACFC\uC5D0 \uC81C\uD55C\uC774 \uC788\uC74C\uC744 \uB73B\uD569\uB2C8\uB2E4.</p><ul class="checklist">${items.map((x) => `<li><span class="st ${x.st}">${{ ok: "\u2713", warn: "!", bad: "\u2715", na: "\u2013" }[x.st]}</span><span class="body"><b>${x.title}</b>${x.body}${x.fix ? `<div class="fix">\u{1F449} ${x.fix}</div>` : ""}</span></li>`).join("")}</ul>`);
   }
@@ -58885,11 +59135,11 @@ void main() {
     openModal(`<h2>\uB0B4\uBCF4\uB0B4\uAE30</h2><p class="muted small">\uB2E8\uC704: ${state.unit.known ? `\uBBF8\uD130 (${state.unit.source})` : "<b>\uBAA8\uB378 \uB2E8\uC704(u)</b> \u2014 \uCD95\uCC99 \uC815\uBCF4\uAC00 \uC5C6\uC5B4 \uBBF8\uD130 \uC5F4\uC740 \uBE44\uC5B4 \uC788\uC2B5\uB2C8\uB2E4"}</p><div class="btnrow"><button class="btn primary" id="ex-csv">CSV (\uC810 + \uAC70\uB9AC)</button><button class="btn" id="ex-json">JSON (\uACF5\uBD84\uC0B0\xB7\uAD11\uC120 \uD3EC\uD568)</button><button class="btn" id="ex-png">PNG \uC2A4\uD06C\uB9B0\uC0F7</button></div>`);
     $("#ex-csv").onclick = () => {
       const f = state.unit.known ? state.unit.factor : null;
-      let csv = "\uFEFFtype,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs\n";
+      let csv = "\uFEFFtype,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs,method\n";
       for (const p of state.points) {
         const po = origCoord(p.p);
         const rr = toReal(po);
-        csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ""},${f ? po.y * f : ""},${f ? po.z * f : ""},${f ? p.sigma0 * f : ""},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ""},${rr ? rr.y : ""},${rr ? rr.z : ""},${rr ? state.unit.crs || "" : ""}
+        csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ""},${f ? po.y * f : ""},${f ? po.z * f : ""},${f ? p.sigma0 * f : ""},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ""},${rr ? rr.y : ""},${rr ? rr.z : ""},${rr ? state.unit.crs || "" : ""},${p.method === "pick" ? "direct_pick_" + (p.pickMode || "") : "multi_ray"}
 `;
       }
       csv += "\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,horizontal_m,vertical_m,slope_deg,slope_pct,unit_source\n";
@@ -58996,6 +59246,27 @@ void main() {
   $$("#live-loupe-size button, #set-loupe-size button").forEach((b) => b.onclick = () => setSetting("loupeSize", b.dataset.ls));
   $("#set-autorot").onchange = (e) => setSetting("autoRotate", e.target.checked);
   $("#set-navpad").onchange = (e) => setSetting("navpad", e.target.checked);
+  $("#set-ptsize").oninput = (e) => {
+    setSetting("ptSize", +e.target.value);
+    if (state.points3) state.points3.material.size = state.settings.ptSize * Math.min(window.devicePixelRatio || 1, 2);
+  };
+  $("#set-cloudcolor").onchange = (e) => {
+    setSetting("cloudColor", e.target.value);
+    rebuildPoints();
+  };
+  $("#set-pick-splat").onchange = (e) => setSetting("pickSplat", e.target.checked);
+  $$("input[name=pickmode]").forEach((r) => r.onchange = (e) => setSetting("pickMode", e.target.value));
+  $("#set-pickr").oninput = (e) => setSetting("pickRadius", +e.target.value);
+  $("#btn-pick-help").onclick = openPickHelp;
+  $("#btn-view").onclick = (e) => {
+    e.stopPropagation();
+    $("#btn-view").parentElement.classList.toggle("open");
+  };
+  document.addEventListener("click", () => $("#btn-view").parentElement.classList.remove("open"));
+  $$("#menu-view button").forEach((b) => b.onclick = () => {
+    setSetting("viewMode", b.dataset.view);
+    applyViewMode();
+  });
   $("#set-navstep").onchange = (e) => setSetting("navStep", Math.max(1, Math.min(90, +e.target.value || 15)));
   $("#btn-navpad").onclick = () => setSetting("navpad", !state.settings.navpad);
   initNavpad();
@@ -59032,6 +59303,11 @@ void main() {
     renderResults();
   });
   $("#pt-table").addEventListener("click", (e) => {
+    const rf = e.target.closest("[data-refine]");
+    if (rf) {
+      startRefine(+rf.dataset.refine);
+      return;
+    }
     const d = e.target.closest("[data-del]");
     if (!d) return;
     const id = +d.dataset.del;
@@ -59110,6 +59386,15 @@ void main() {
     $("#set-autorot").checked = st.autoRotate;
     $("#set-navpad").checked = st.navpad;
     $("#set-navstep").value = st.navStep;
+    $("#set-ptsize").value = st.ptSize;
+    $("#ptsize-label").textContent = `${st.ptSize} px`;
+    $("#set-cloudcolor").value = st.cloudColor;
+    $("#set-pick-splat").checked = st.pickSplat;
+    $$("input[name=pickmode]").forEach((r) => r.checked = r.value === st.pickMode);
+    $("#opt-cluster").classList.toggle("on", st.pickMode === "cluster");
+    $("#opt-nearest").classList.toggle("on", st.pickMode === "nearest");
+    $("#set-pickr").value = st.pickRadius;
+    $("#pickr-label").textContent = `${st.pickRadius} px`;
     $("#navpad").hidden = !(st.navpad && state.mesh);
     $("#btn-navpad").classList.toggle("active", st.navpad);
     $$("#live-loupe-size button, #set-loupe-size button").forEach((b) => b.classList.toggle("on", b.dataset.ls === st.loupeSize));
@@ -59174,7 +59459,9 @@ void main() {
     down = null;
     if (mv < 5 && state.task && e.target === renderer.domElement) {
       const r = renderer.domElement.getBoundingClientRect();
+      state.forceRay = e.shiftKey;
       onMeasureClick(e.clientX - r.left, e.clientY - r.top);
+      state.forceRay = false;
     }
   });
   document.addEventListener("pointermove", (e) => {
@@ -59191,6 +59478,13 @@ void main() {
       return;
     }
     const k = e.key.toLowerCase();
+    if (e.key === "Tab" && state.mesh) {
+      e.preventDefault();
+      setSetting("viewMode", state.settings.viewMode === "splat" ? "cloud" : "splat");
+      applyViewMode();
+      toast(`\uBCF4\uAE30: <b>${state.settings.viewMode === "cloud" ? "\uC810\uAD70 \u2014 \uD074\uB9AD \uD55C \uBC88\uC73C\uB85C \uC810 \uC120\uD0DD(\uC9C1\uC811\uC120\uD0DD)" : "\uC2A4\uD50C\uB7AB \u2014 \uB2E4\uC2DC\uC810 \uD074\uB9AD \uCE21\uC815"}</b>`, "info", 2500);
+      return;
+    }
     if (k === "m") $("#btn-point").click();
     else if (k === "d") $("#btn-dist").click();
     else if (k === "r") autoRotate();
@@ -59292,6 +59586,10 @@ void main() {
     autoOrbit,
     origCoord,
     navAction,
+    directPick,
+    addPickedPoint,
+    applyViewMode,
+    startRefine,
     geomInfo,
     addGeom,
     distanceDecomp,

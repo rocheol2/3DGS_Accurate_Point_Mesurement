@@ -12,13 +12,13 @@ const DEG = Math.PI / 180;
 
 // ------------------------------------------------------------------ 상태
 const state = {
-  file: null, header: null, mesh: null, bounds: null, centers: null, coordOffset: null,
+  file: null, header: null, mesh: null, bounds: null, centers: null, coordOffset: null, cloud: null, points3: null,
   unit: { known: false, factor: 1, sigmaRel: 0, source: '' },
   upSource: null,
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
   rays: [], estimate: null, refPatch: null, autoRotCount: 0,
   points: [], dists: [], geoms: [], selected: new Set(), nextId: 1, nextGeomId: 1,
-  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, dunit: 'auto', labels: true },
+  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, viewMode: 'splat', ptSize: 2, cloudColor: 'rgb', pickSplat: false, pickMode: 'cluster', pickRadius: 8, pickHelpSeen: false, dunit: 'auto', labels: true },
   autoPivot: null, autoAngleDeg: 0, autoTiltDeg: 0, loupeHiResFailed: false, gcpInputs: {},
   mouse: { x: 0, y: 0, inside: false },
   webgl2: true,
@@ -76,7 +76,7 @@ function loop() {
   tickAnimations();
   controls.update();
   if (state.bounds) updateClipPlanes();
-  if (state.mesh) renderer.render(scene, camera);
+  if (state.mesh || state.points3) renderer.render(scene, camera);
   drawOverlay();
   updateLoupe();
 }
@@ -468,6 +468,81 @@ function parsePlyHeader(buf) {
   const um = ctext.match(/up[\s_-]?axis\s*[:=]?\s*([+-]?)([xyz])/); h.upAxis = um ? (um[1] || '+') + um[2] : null;
   return h;
 }
+// ================================================================== 점군 보기 · 1클릭 직접 선택
+const SH_C0 = 0.28209479177387814;
+function buildCloudFromPly(buf, h) { // 3DGS PLY → {pos Float32Array(N*3), col Uint8Array(N*3), n}
+  if (!h || h.compressed || h.format !== 'binary_little_endian' || h.order[0] !== 'vertex') return null;
+  const v = h.elements.vertex; if (v.props.some((q) => q.type !== 'float' && q.type !== 'float32')) return null;
+  const k = v.props.length, ix = h.names.indexOf('x'), ir = h.names.indexOf('f_dc_0'), io = h.names.indexOf('opacity'); if (ix < 0) return null;
+  const aligned = h.headerLength % 4 === 0; const f32 = aligned ? new Float32Array(buf, h.headerLength, v.count * k) : new Float32Array(buf.slice(h.headerLength, h.headerLength + v.count * k * 4));
+  const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3); let n = 0;
+  for (let i = 0; i < v.count; i++) { const b = i * k; if (io >= 0 && 1 / (1 + Math.exp(-f32[b + io])) < 0.05) continue; pos[3 * n] = f32[b + ix]; pos[3 * n + 1] = f32[b + ix + 1]; pos[3 * n + 2] = f32[b + ix + 2];
+    if (ir >= 0) for (let c = 0; c < 3; c++) col[3 * n + c] = Math.max(0, Math.min(255, Math.round((0.5 + SH_C0 * f32[b + ir + c]) * 255))); else col[3 * n] = col[3 * n + 1] = col[3 * n + 2] = 200; n++; }
+  return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), n };
+}
+function buildCloudFromMesh(mesh) { try { const src = mesh.splats || mesh.packedSplats; const N = src?.numSplats || 0; if (!N || !src.forEachSplat) return null; const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3); let n = 0; src.forEachSplat((i, c, sc, q, op, color) => { if (op < 0.05) return; pos[3 * n] = c.x; pos[3 * n + 1] = c.y; pos[3 * n + 2] = c.z; col[3 * n] = Math.round(color.r * 255); col[3 * n + 1] = Math.round(color.g * 255); col[3 * n + 2] = Math.round(color.b * 255); n++; }); return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), n }; } catch (e) { console.warn('점군 추출 실패', e); return null; } }
+function cloudColors(cl) { const m = state.settings.cloudColor; const out = new Uint8Array(cl.n * 3); if (m === 'rgb') return cl.col;
+  if (m === 'mono') { out.fill(190); return out; }
+  const up = upVec(); let lo = Infinity, hi = -Infinity; const hs = new Float32Array(cl.n); for (let i = 0; i < cl.n; i++) { const hgt = cl.pos[3 * i] * up.x + cl.pos[3 * i + 1] * up.y + cl.pos[3 * i + 2] * up.z; hs[i] = hgt; }
+  const sorted = Float32Array.from(hs).sort(); lo = sorted[Math.floor(cl.n * 0.02)]; hi = sorted[Math.floor(cl.n * 0.98)];
+  for (let i = 0; i < cl.n; i++) { const t = THREE.MathUtils.clamp((hs[i] - lo) / Math.max(1e-9, hi - lo), 0, 1); const c = new THREE.Color().setHSL(0.7 - 0.7 * t, 0.9, 0.5); out[3 * i] = c.r * 255; out[3 * i + 1] = c.g * 255; out[3 * i + 2] = c.b * 255; } return out; }
+function rebuildPoints() {
+  if (state.points3) { scene.remove(state.points3); state.points3.geometry.dispose(); state.points3.material.dispose(); state.points3 = null; }
+  const cl = state.cloud; if (!cl) return;
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(cl.pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(cloudColors(cl), 3, true));
+  const m = new THREE.PointsMaterial({ size: state.settings.ptSize * Math.min(window.devicePixelRatio || 1, 2), sizeAttenuation: false, vertexColors: true }); m.depthWrite = true;
+  state.points3 = new THREE.Points(g, m); state.points3.frustumCulled = false; scene.add(state.points3); applyViewMode();
+}
+function applyViewMode() {
+  const mode = state.settings.viewMode; const names = { splat: '스플랫', cloud: '점군', both: '겹침' };
+  if (state.mesh) state.mesh.visible = mode !== 'cloud' || !state.points3;
+  if (state.points3) state.points3.visible = mode !== 'splat';
+  $('#view-label').textContent = names[mode] || mode; $$('#menu-view button').forEach((b) => b.classList.toggle('on', b.dataset.view === mode));
+  if (mode !== 'splat' && !state.points3 && state.mesh) toast('이 파일에서는 점군을 만들 수 없어 스플랫으로 표시합니다.', 'warn', 4000);
+}
+function directPickEnabled() { return state.settings.viewMode !== 'splat' ? !!state.cloud : (state.settings.pickSplat && !!state.cloud); }
+// 클릭 광선 원뿔 안의 가우시안 중심에서 점 하나를 고른다 → { p, sigma, n, mode } | null
+function directPick(px, py) {
+  const cl = state.cloud; if (!cl) return null;
+  const ray = rayFromPixel(px, py); const o = ray.o, d = ray.d; const f = focalPx();
+  for (let rad = state.settings.pickRadius; rad <= 40; rad *= 2) {
+    const tanA = rad / f; const hits = [];
+    for (let i = 0; i < cl.n; i++) { const vx = cl.pos[3 * i] - o.x, vy = cl.pos[3 * i + 1] - o.y, vz = cl.pos[3 * i + 2] - o.z; const t = vx * d.x + vy * d.y + vz * d.z; if (t <= 1e-6) continue; const perp2 = vx * vx + vy * vy + vz * vz - t * t; const lim = t * tanA; if (perp2 < lim * lim) hits.push({ t, i, ang: Math.sqrt(Math.max(0, perp2)) / t }); }
+    if (!hits.length) continue;
+    if (state.settings.pickMode === 'nearest') { let b = hits[0]; for (const h of hits) if (h.ang < b.ang) b = h; return { p: new THREE.Vector3(cl.pos[3 * b.i], cl.pos[3 * b.i + 1], cl.pos[3 * b.i + 2]), sigma: 0, n: 1, mode: 'nearest', radius: rad }; }
+    hits.sort((a, b) => a.t - b.t); const K = Math.max(3, Math.floor(hits.length * 0.03)); let s0 = -1;
+    for (let a = 0; a + K - 1 < hits.length; a++) { if (hits[a + K - 1].t <= hits[a].t * 1.12) { s0 = a; break; } }
+    if (s0 < 0) { if (hits.length < 3) { const b = hits[0]; return { p: new THREE.Vector3(cl.pos[3 * b.i], cl.pos[3 * b.i + 1], cl.pos[3 * b.i + 2]), sigma: 0, n: 1, mode: 'cluster(단일)', radius: rad }; } s0 = 0; }
+    const tEnd = hits[s0].t * 1.12; const mem = hits.filter((h, idx) => idx >= s0 && h.t <= tEnd);
+    const xs = mem.map((h) => cl.pos[3 * h.i]), ys = mem.map((h) => cl.pos[3 * h.i + 1]), zs = mem.map((h) => cl.pos[3 * h.i + 2]); const med = (arr) => { const a2 = Float64Array.from(arr).sort(); return a2[Math.floor(a2.length / 2)]; };
+    const p = new THREE.Vector3(med(xs), med(ys), med(zs)); let ss = 0; for (const h of mem) ss += (cl.pos[3 * h.i] - p.x) ** 2 + (cl.pos[3 * h.i + 1] - p.y) ** 2 + (cl.pos[3 * h.i + 2] - p.z) ** 2;
+    return { p, sigma: Math.sqrt(ss / mem.length / 3), n: mem.length, mode: 'cluster', radius: rad };
+  }
+  return null;
+}
+function openPickHelp() {
+  openModal(`<h2>1클릭 직접 선택 — 두 방식의 차이</h2>
+  <p class="small">3DGS의 가우시안은 표면 위의 점이 아니라 <b>표면 근처에 두께를 가지고 흩어진 타원</b>들입니다. 한 표면의 중심점들은 보통 수 cm~수십 cm 두께로 퍼져 있고 앞뒤에 반투명 잡티(floater)가 떠 있습니다. 그래서 "어느 점을 좌표로 삼느냐"에 따라 결과가 달라집니다. 이 방식은 논문이 다시점 방법보다 부정확하다고 지적한 "점군/메시 직접 찍기"에 해당하므로, 빠른 측정용으로 쓰고 정밀도가 필요하면 <b>[정밀화]</b>(다시점 클릭)로 이어가세요.</p>
+  <table class="cmp"><tr><th>상황</th><th>가장 가까운 점 하나</th><th>앞쪽 군집 중앙값 (권장·기본)</th></tr>
+  <tr><td>평평한 벽·바닥</td><td>표면 앞뒤로 튄 점 하나가 걸려 오차가 스플랫 두께만큼 무작위로 생김</td><td>여러 점의 중앙값이라 흩어짐이 평균되어 안정적</td></tr>
+  <tr><td>앞에 잡티가 떠 있음</td><td>잡티를 그대로 찍음(수 m 튈 수 있음)</td><td>1~2개짜리 외톨이는 무시하고 뒤의 진짜 표면 무리를 택함</td></tr>
+  <tr><td>가는 기둥·모서리·표지판 끝</td><td>커서가 정확하면 그 점을 찍어 <b>뾰족한 특징점에 유리</b></td><td>원뿔 안에 배경 점이 섞이면 중앙값이 뒤로 끌릴 수 있음 → 원뿔 반경을 작게</td></tr>
+  <tr><td>재현성(같은 곳 두 번 클릭)</td><td>커서 1 px 차이로 다른 점이 잡혀 값이 흔들림</td><td>거의 같은 값</td></tr>
+  <tr><td>불확도(σ) 표시</td><td>점 하나라 알 수 없음(0으로 표시)</td><td>군집의 퍼짐을 σ로 표시</td></tr></table>
+  <p class="small"><b>권장</b>: 기본은 군집 중앙값, 뾰족한 특징점을 찍을 때만 "가장 가까운 점 하나"로 바꾸고, 가는 구조물에서는 커서 원뿔 반경을 3~5 px 로 줄이세요. 어느 쪽이든 결과에는 <span class="badge pick">직접선택</span> 배지가 붙습니다. 측정 중 <b>Shift+클릭</b>은 항상 다시점 광선(정밀)입니다.</p>
+  <div class="btnrow"><button class="btn primary" id="pick-help-ok">알겠습니다</button><button class="btn" id="pick-help-set">설정에서 방식 바꾸기</button></div>`);
+  $('#pick-help-ok').onclick = closeModal; $('#pick-help-set').onclick = () => { closeModal(); showTab('settings'); };
+}
+// 직접 선택한 점을 작업에 추가
+function addPickedPoint(px, py) {
+  const r = directPick(px, py); if (!r) { toast('커서 아래에서 점군 점을 찾지 못했습니다. 모델 위를 클릭하거나 원뿔 반경을 키우세요.', 'warn', 3500); return false; }
+  const pt = { id: state.nextId++, name: `P${state.nextId - 1}`, p: r.p, sigma0: r.sigma, cov: new THREE.Matrix3().identity().multiplyScalar(Math.max(r.sigma, 1e-4) ** 2), n: r.n, quality: 'pick', method: 'pick', pickMode: r.mode, pxRms: NaN, maxAngleDeg: 0, rays: [] };
+  state.points.push(pt); const t = state.task; t.pts.push(pt);
+  toast(`<b>${pt.name} 직접 선택</b> ${fmtCoord(pt.p)} · 군집 ${r.n}점 · σ ${fmtLen(r.sigma)} <span class="badge pick">직접선택</span><br><span class="muted small">방식: ${r.mode === 'nearest' ? '가장 가까운 점 하나' : '앞쪽 군집 중앙값'} · 정밀도가 필요하면 결과 표의 [정밀화]</span>`, 'info', 6000);
+  if (!state.settings.pickHelpSeen) { setSetting('pickHelpSeen', true); openPickHelp(); }
+  taskPointAdded(t); renderResults(); updateCheckDot(); return true;
+}
+function startRefine(id) { const pt = state.points.find((q) => q.id === id); if (!pt) return; startTask('point', { refineId: id }); state.autoPivot = pt.p.clone(); moveTarget(pt.p, 300); toast(`<b>${pt.name} 정밀화</b> — 같은 점을 여러 각도에서 ${state.settings.n}회 클릭하면 다시점 결과로 교체됩니다 (자동 회전이 이 점을 중심으로 돕니다).`, 'info', 7000); }
 const PLY_TYPE_SIZE = { char: 1, int8: 1, uchar: 1, uint8: 1, short: 2, int16: 2, ushort: 2, uint16: 2, int: 4, int32: 4, uint: 4, uint32: 4, float: 4, float32: 4, double: 8, float64: 8 };
 // 좌표가 매우 큰 PLY(지역·국가 좌표계)의 x,y,z 에서 오프셋을 빼 원점 근처로 옮긴다(버퍼 제자리 수정). 압축 PLY 는 chunk 의 min/max 를 옮긴다.
 function shiftPlyInPlace(buf, h, off) {
@@ -525,6 +600,7 @@ async function loadFiles(fileList) {
   }
   // 이전 모델 제거
   if (state.mesh) { scene.remove(state.mesh); try { state.mesh.dispose?.(); } catch (_) {} state.mesh = null; }
+  if (state.points3) { scene.remove(state.points3); state.points3 = null; } state.cloud = null;
   resetAll(true); state.coordOffset = null;
   if (header) { // 지역·국가 좌표계처럼 좌표가 크면 원점 이동 (float32 정밀도 보호). 원래 좌표는 origCoord() 로 복원
     const sample = positionsFromPly(buf, header);
@@ -549,6 +625,7 @@ async function loadFiles(fileList) {
   if (!pos) { try { const src = mesh.splats || mesh.packedSplats; const n = src?.numSplats || 0; const step = Math.max(1, Math.floor(n / 150000)); const arr = []; src?.forEachSplat?.((i, c) => { if (i % step === 0) arr.push(c.x, c.y, c.z); }); if (arr.length) pos = arr; } catch (e) { console.warn('forEachSplat 실패', e); } }
   state.bounds = pos ? boundsFromPositions(pos) : { center: new THREE.Vector3(), radius: 5 };
   state.centers = pos ? Float32Array.from(pos) : null; // 휠 줌의 표면 깊이 추정용 표본
+  state.cloud = (header ? buildCloudFromPly(buf, header) : null) || buildCloudFromMesh(mesh); rebuildPoints(); if (state.cloud) state.centers = state.cloud.n > 200000 ? (() => { const step = Math.ceil(state.cloud.n / 200000); const out = new Float32Array(Math.ceil(state.cloud.n / step) * 3); let m = 0; for (let i = 0; i < state.cloud.n; i += step) { out[3 * m] = state.cloud.pos[3 * i]; out[3 * m + 1] = state.cloud.pos[3 * i + 1]; out[3 * m + 2] = state.cloud.pos[3 * i + 2]; m++; } return out.subarray(0, m * 3); })() : state.cloud.pos;
   // 위 방향
   const upFromHeader = header?.upAxis ? { '+z': [0, 0, 1], '-z': [0, 0, -1], '+y': [0, 1, 0], '-y': [0, -1, 0], '+x': [1, 0, 0], '-x': [-1, 0, 0] }[header.upAxis] : null;
   if (upFromHeader) setUp(new THREE.Vector3(...upFromHeader), 'PLY 헤더(up axis)');
@@ -560,7 +637,8 @@ async function loadFiles(fileList) {
   resolveUnits(header, sidecar);
   // UI
   $('#loading').hidden = true; $('#dropzone').classList.add('hidden');
-  ['#btn-point', '#btn-dist', '#btn-scale', '#btn-export', '#btn-up', '#btn-home', '#btn-navpad', '#btn-analyze'].forEach((s) => ($(s).disabled = false));
+  ['#btn-point', '#btn-dist', '#btn-scale', '#btn-export', '#btn-up', '#btn-home', '#btn-navpad', '#btn-analyze', '#btn-view'].forEach((s) => ($(s).disabled = false));
+  $('#btn-view').disabled = false; applyViewMode();
   $('#navpad').hidden = !state.settings.navpad;
   glHost.classList.remove('measuring');
   coach('', `<b>${main.name}</b> 열림 (가우시안 ${state.file.count ? state.file.count.toLocaleString() : '?'}개). <b>● 점 측정</b> 또는 <b>↔ 거리 측정</b>을 누르고, 휠로 잴 곳을 확대하세요.`);
@@ -619,6 +697,7 @@ function cancelPoint(ui = true) { state.rays = []; state.estimate = null; state.
 function onMeasureClick(px, py) {
   if (!state.task || !state.mesh) return;
   if (anims.length) { toast('카메라 회전 중입니다. 멈춘 뒤 클릭하세요.', 'info', 1500); return; }
+  if (state.rays.length === 0 && directPickEnabled() && !state.forceRay && !state.task.refineId) { const ex = state.task.kind !== 'point' ? pickExistingPoint(px, py) : null; if (!ex) { addPickedPoint(px, py); return; } }
   if (state.rays.length === 0 && state.task.kind !== 'point') { // 이미 잰 점 마커를 클릭하면 그 점을 재사용
     const ex = pickExistingPoint(px, py);
     if (ex) { const t = state.task; if (t.pts.includes(ex) && t.kind !== 'polyline') { toast(`${ex.name} 은 이미 선택되어 있습니다.`, 'warn', 2500); return; } t.pts.push(ex); toast(`기존 점 <b>${ex.name}</b> 사용`, 'info', 2500); taskPointAdded(t); renderResults(); return; }
@@ -654,8 +733,9 @@ function finishPoint(force = false) {
   if (e.maxAngleDeg < 10 && !force) { showError('E08', `현재 최대 각도 ${e.maxAngleDeg.toFixed(1)}°`, { actions: '<div class="btnrow"><button class="btn small" data-act="force">그래도 확정(비권장)</button><button class="btn small" data-act="undo">마지막 광선 취소</button></div>', onAction: (a) => { if (a === 'force') finishPoint(true); if (a === 'undo') undoRay(); } }); return; }
   if (e.pxRms > 4) showError('E09', `잔차 RMS ${e.pxRms.toFixed(1)} px, σ₀ = ${fmtLen(e.sigma0)}`);
   const pt = { id: state.nextId++, name: `P${state.nextId - 1}`, p: e.p.clone(), sigma0: e.sigma0, cov: e.cov.clone(), n: e.n, quality: e.quality, pxRms: e.pxRms, maxAngleDeg: e.maxAngleDeg, rays: state.rays.map((r) => ({ o: r.o.toArray(), d: r.d.toArray(), screen: r.screen, note: r.note })) };
-  state.points.push(pt);
-  const t = state.task; t.pts.push(pt);
+  const t = state.task;
+  if (t.refineId) { const old = state.points.find((q) => q.id === t.refineId); if (old) { Object.assign(old, { p: pt.p, sigma0: pt.sigma0, cov: pt.cov, n: pt.n, quality: pt.quality, method: 'multi', pxRms: pt.pxRms, maxAngleDeg: pt.maxAngleDeg, rays: pt.rays, refinedFrom: old.pickMode }); state.nextId--; toast(`<b>${old.name} 정밀화 완료</b> ${fmtCoord(old.p)} · σ₀ ${fmtLen(old.sigma0)} · 품질 <span class="badge ${old.quality}">${QUALITY[old.quality].label}</span>`, 'good', 6000); cancelPoint(false); endTask(); renderResults(); updateCheckDot(); return; } }
+  pt.method = 'multi'; state.points.push(pt); t.pts.push(pt);
   toast(`<b>${pt.name} 확정</b> ${fmtCoord(pt.p)} · σ₀ ${fmtLen(pt.sigma0)} · 품질 <span class="badge ${pt.quality}">${QUALITY[pt.quality].label}</span>`, pt.quality === 'poor' ? 'warn' : 'good', 6000);
   cancelPoint(false);
   taskPointAdded(t);
@@ -784,6 +864,7 @@ function updateMeasureUI() {
   gf.hidden = !(t.kind === 'polyline' || t.kind === 'area'); gf.disabled = n > 0 || t.pts.length < (need || 99);
   const step = `${Math.min(n + 1, N)}/${N}`; const lab = taskLabel();
   if (n === 0 && (t.kind === 'polyline' || t.kind === 'area') && t.pts.length >= (need || 99)) coach(step, `<b>${lab}</b> — 점을 더 재거나, 충분하면 <b>[✔ 완성]</b>(Enter)을 누르세요. 기존 점 마커를 클릭하면 재사용됩니다.`, `선택 ${t.pts.length}개`);
+  else if (n === 0 && directPickEnabled() && !t.refineId) coach(step, `<b>${lab}</b> — <b>점군에서 클릭 한 번</b>으로 점을 고릅니다(${state.settings.pickMode === 'nearest' ? '가장 가까운 점 하나' : '앞쪽 군집 중앙값'}). 정밀하게 재려면 <b>Shift+클릭</b>(다시점 광선).`, '직접선택 = 빠르지만 스플랫 두께만큼 불확실');
   else if (n === 0) coach(step, `<b>${lab}</b> — 잴 점을 <b>휠로 크게 확대</b>한 뒤 정확히 클릭하세요. (확대창이 커서 옆에 뜹니다)${t.kind !== 'point' && state.points.length ? ' 이미 잰 점은 마커 클릭으로 재사용.' : ''}`, '오른쪽 드래그: 이동 · 왼쪽 드래그: 회전');
   else if (state.settings.autoRotate) coach(step, `<b>${lab}</b> — 카메라가 자동으로 돌아갔습니다. 화면 중앙 근처(노란 안내선·청록 원)의 <b>같은 점을 클릭</b>하세요. ${N - n}개 남음 · 다음 회전: <b>${nextAutoLabel(n + 1) || '없음(마지막)'}</b> · 방향 바꾸기: <b>← → ↑ ↓</b> 키`, e ? `σ₀ ${fmtLen(e.sigma0)} · 최대각 ${e.maxAngleDeg.toFixed(0)}°` : `누적 좌우 ${state.autoAngleDeg.toFixed(0)}° · 상하 ${state.autoTiltDeg.toFixed(0)}°`);
   else if (n === 1) coach(step, `<b>${lab}</b> — 카메라를 <b>20° 이상 돌린 뒤</b>(왼쪽 드래그 또는 <b>R</b>) 노란 <b>안내선 위</b>에서 같은 점을 클릭하세요.`, '');
@@ -795,7 +876,8 @@ setInterval(tickAngleMeter, 120);
 // ------------------------------------------------------------------ 결과 패널
 function renderResults() {
   $('#results-count').textContent = state.points.length;
-  const tb = $('#pt-table tbody'); tb.innerHTML = state.points.map((p) => `<tr class="${state.selected.has(p.id) ? 'sel' : ''}"><td><input type="checkbox" data-sel="${p.id}" ${state.selected.has(p.id) ? 'checked' : ''}></td><td><b>${p.name}</b> <span class="badge ${p.quality}" title="${QUALITY[p.quality].desc}">${QUALITY[p.quality].label}</span></td><td class="mono">${fmtCoord(p.p)}</td><td class="num">${fmtLen(p.sigma0)}</td><td class="num">${p.n}</td><td><button class="xbtn" data-del="${p.id}" title="삭제">✕</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">아직 측정한 점이 없습니다.</td></tr>';
+  const tb = $('#pt-table tbody'); tb.innerHTML = state.points.map((p) => `<tr class="${state.selected.has(p.id) ? 'sel' : ''}"><td><input type="checkbox" data-sel="${p.id}" ${state.selected.has(p.id) ? 'checked' : ''}></td><td><b>${p.name}</b> <span class="badge ${p.quality}" title="${QUALITY[p.quality].desc}">${QUALITY[p.quality].label}</span></td><td class="mono">${fmtCoord(p.p)}</td><td class="num">${fmtLen(p.sigma0)}</td><td class="num">${p.n}</td><td>${p.method === 'pick' ? `<button class="btn small" data-refine="${p.id}" title="이 점을 다시점 클릭으로 정밀 측정">정밀화</button> ` : ''}<button class="xbtn" data-del="${p.id}" title="삭제">✕</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">아직 측정한 점이 없습니다.</td></tr>';
+  $('#pt-legend').hidden = !state.points.length;
   const db = $('#dist-table tbody'); db.innerHTML = state.dists.map((d, i) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) return ''; const di = distanceDecomp(a, b); return `<tr><td>${a.name}–${b.name}</td><td class="num"><b>${fmtLen(di.d)}</b>${state.unit.known ? '' : ' <span title="축척 정보 없음">⚠</span>'}<br><span class="muted">± ${fmtLen(di.sigma)}</span></td><td class="num">${fmtLen(di.h)}</td><td class="num">${fmtLen(di.v)}</td><td class="num">${di.slopeDeg.toFixed(1)}°<br><span class="muted">${Number.isFinite(di.slopePct) ? di.slopePct.toFixed(1) + ' %' : '수직'}</span></td><td><button class="xbtn" data-ddel="${i}" title="삭제">✕</button></td></tr>`; }).join('') || '<tr><td colspan="6" class="muted">거리 없음 — ↔ 거리 측정 또는 점 2개 체크 후 [선택 두 점 거리]</td></tr>';
   const gb = $('#geom-table tbody'); gb.innerHTML = state.geoms.map((g, i) => { const gi = geomInfo(g); if (!gi) return ''; return `<tr><td>${GEOM_LABEL[g.type]} <b>${g.name}</b><br><span class="muted">${gi.pts.map((p) => p.name).join('→')}</span></td><td class="num"><b>${gi.text}</b>${!state.unit.known && g.type !== 'angle' ? ' <span title="축척 정보 없음">⚠</span>' : ''}<br><span class="muted">${gi.extra}</span></td><td><button class="xbtn" data-gdel="${i}" title="삭제">✕</button></td></tr>`; }).join('') || '<tr><td colspan="3" class="muted">없음 — 📐 분석 메뉴에서 각도(A)·길이(L)·면적(P)</td></tr>';
   $('#btn-dist-sel').disabled = state.selected.size !== 2;
@@ -818,7 +900,7 @@ function openChecklist() {
   else { const f = state.file, h = state.header; it('ok', '파일', `${f.name} · ${(f.size / 1e6).toFixed(1)} MB · ${f.ext.toUpperCase()}${f.count ? ` · 가우시안 ${f.count.toLocaleString()}개` : ''}${h ? ` · SH ${h.shDegree}차${h.compressed ? ' · 압축 PLY' : ''}` : ''}`); if (h) it('ok', '3DGS 속성', h.compressed ? 'SuperSplat 압축 PLY (렌더러가 해석)' : `opacity · scale_0~2 · rot_0~3 확인`); else it('ok', '3DGS 속성', `${f.ext.toUpperCase()} 형식 — 렌더러(Spark)가 해석함`); }
   if (state.file) { if (state.unit.known) it('ok', '축척 (1 u → m)', `${state.unit.source} · 1 u = ${state.unit.factor.toPrecision(6)} m${state.unit.sigmaRel ? ` · 축척 상대 불확도 ≈ ${(state.unit.sigmaRel * 100).toFixed(1)} %` : ''}`); else it('warn', '축척 (1 u → m)', ERRORS.E05.why, ERRORS.E05.fix); if (state.coordOffset) it('ok', '좌표 원점 이동', `파일 좌표가 커서 뷰어 내부에서 (${state.coordOffset.join(', ')}) 를 뺐습니다. 표시·내보내기 좌표는 원래 값입니다.`); it(state.upSource ? 'ok' : 'warn', '위(上) 방향', state.upSource ? `${state.upSource}: ${$('#up-label').textContent}` : `정보 없음 → ${$('#up-label').textContent} 가정 (측정 정확도 무관)`, state.upSource ? '' : ERRORS.E06.fix); }
   if (state.task) { const n = state.rays.length, e = state.estimate; if (n < 2) it('bad', '진행 중 측정: 광선 수', `${n}개 — ${ERRORS.E07.why}`, ERRORS.E07.fix); else { it(e.maxAngleDeg >= 20 ? 'ok' : e.maxAngleDeg >= 10 ? 'warn' : 'bad', '진행 중 측정: 광선 각도', `최대 ${e.maxAngleDeg.toFixed(1)}° (20° 이상 권장)`, e.maxAngleDeg < 20 ? ERRORS.E08.fix : ''); it(e.pxRms <= 1.5 ? 'ok' : e.pxRms <= 4 ? 'warn' : 'bad', '진행 중 측정: 광선 잔차', `RMS ${e.pxRms.toFixed(1)} px · σ₀ ${fmtLen(e.sigma0)}`, e.pxRms > 4 ? ERRORS.E09.fix : ''); } }
-  it(state.points.length ? 'ok' : 'na', '결과', `점 ${state.points.length}개 · 거리 ${state.dists.length}개${state.points.length && !state.unit.known ? ' · ⚠ 모두 모델 단위' : ''}`);
+  if (state.cloud) it('ok', '점군', `가우시안 중심 ${state.cloud.n.toLocaleString()}점 · 보기 ${state.settings.viewMode} · 1클릭 방식 ${state.settings.pickMode === 'nearest' ? '가장 가까운 점' : '군집 중앙값'} · 원뿔 ${state.settings.pickRadius} px`); it(state.points.length ? 'ok' : 'na', '결과', `점 ${state.points.length}개 · 거리 ${state.dists.length}개${state.points.length && !state.unit.known ? ' · ⚠ 모두 모델 단위' : ''}`);
   openModal(`<h2>정보 점검</h2><p class="muted small">측정에 필요한 정보가 갖춰졌는지 확인합니다. 빨강은 진행 불가, 노랑은 결과에 제한이 있음을 뜻합니다.</p><ul class="checklist">${items.map((x) => `<li><span class="st ${x.st}">${{ ok: '✓', warn: '!', bad: '✕', na: '–' }[x.st]}</span><span class="body"><b>${x.title}</b>${x.body}${x.fix ? `<div class="fix">👉 ${x.fix}</div>` : ''}</span></li>`).join('')}</ul>`);
 }
 function openHelp() {
@@ -942,7 +1024,7 @@ function openManualScale() {
 function openExport() {
   if (!state.points.length) { toast('내보낼 측정 결과가 없습니다. 먼저 점을 재세요.', 'warn'); return; }
   openModal(`<h2>내보내기</h2><p class="muted small">단위: ${state.unit.known ? `미터 (${state.unit.source})` : '<b>모델 단위(u)</b> — 축척 정보가 없어 미터 열은 비어 있습니다'}</p><div class="btnrow"><button class="btn primary" id="ex-csv">CSV (점 + 거리)</button><button class="btn" id="ex-json">JSON (공분산·광선 포함)</button><button class="btn" id="ex-png">PNG 스크린샷</button></div>`);
-  $('#ex-csv').onclick = () => { const f = state.unit.known ? state.unit.factor : null; let csv = '﻿type,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs\n'; for (const p of state.points) { const po = origCoord(p.p); const rr = toReal(po); csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ''},${f ? po.y * f : ''},${f ? po.z * f : ''},${f ? p.sigma0 * f : ''},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ''},${rr ? rr.y : ''},${rr ? rr.z : ''},${rr ? state.unit.crs || '' : ''}\n`; } csv += '\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,horizontal_m,vertical_m,slope_deg,slope_pct,unit_source\n'; for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const di = distanceDecomp(a, b); csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ''},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ''},${f ? di.h * f : ''},${f ? di.v * f : ''},${di.slopeDeg.toFixed(3)},${Number.isFinite(di.slopePct) ? di.slopePct.toFixed(2) : ''},"${state.unit.known ? state.unit.source : '축척 정보 없음(모델 단위)'}"\n`; }
+  $('#ex-csv').onclick = () => { const f = state.unit.known ? state.unit.factor : null; let csv = '﻿type,id,name,x_model,y_model,z_model,sigma0_model,x_m,y_m,z_m,sigma0_m,n_rays,quality,px_rms,max_angle_deg,x_real,y_real,z_real,crs,method\n'; for (const p of state.points) { const po = origCoord(p.p); const rr = toReal(po); csv += `point,${p.id},${p.name},${po.x},${po.y},${po.z},${p.sigma0},${f ? po.x * f : ''},${f ? po.y * f : ''},${f ? po.z * f : ''},${f ? p.sigma0 * f : ''},${p.n},${p.quality},${p.pxRms.toFixed(2)},${p.maxAngleDeg.toFixed(1)},${rr ? rr.x : ''},${rr ? rr.y : ''},${rr ? rr.z : ''},${rr ? state.unit.crs || '' : ''},${p.method === 'pick' ? 'direct_pick_' + (p.pickMode || '') : 'multi_ray'}\n`; } csv += '\ntype,a,b,dist_model,sigma_model,dist_m,sigma_m,horizontal_m,vertical_m,slope_deg,slope_pct,unit_source\n'; for (const d of state.dists) { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); if (!a || !b) continue; const di = distanceDecomp(a, b); csv += `distance,${a.name},${b.name},${di.d},${di.sigma},${f ? di.d * f : ''},${f ? Math.sqrt((di.sigma * f) ** 2 + (di.d * f * state.unit.sigmaRel) ** 2) : ''},${f ? di.h * f : ''},${f ? di.v * f : ''},${di.slopeDeg.toFixed(3)},${Number.isFinite(di.slopePct) ? di.slopePct.toFixed(2) : ''},"${state.unit.known ? state.unit.source : '축척 정보 없음(모델 단위)'}"\n`; }
     csv += '\ntype,name,points,value,sigma,unit,detail\n'; for (const g of state.geoms) { const gi = geomInfo(g); if (!gi) continue; const unit = g.type === 'angle' ? 'deg' : g.type === 'area' ? (f ? 'm2' : 'u2') : (f ? 'm' : 'u'); const k = g.type === 'angle' ? 1 : g.type === 'area' ? (f ? f * f : 1) : (f || 1); csv += `${g.type},${g.name},${gi.pts.map((p) => p.name).join('>')},${(gi.main * k)},${(gi.sigma * k)},${unit},"${gi.extra}"\n`; } download(`${state.file.name}.measurements.csv`, csv, 'text/csv'); };
   $('#ex-json').onclick = () => download(`${state.file.name}.measurements.json`, JSON.stringify({ file: state.file, unit: state.unit, up: $('#up-label').textContent, coord_offset_subtracted_in_viewer: state.coordOffset, points: state.points.map((p) => ({ ...p, p: origCoord(p.p).toArray(), p_viewer: p.p.toArray(), cov: p.cov.toArray() })), geometries: state.geoms.map((g) => { const gi = geomInfo(g); return { ...g, value: gi?.main, sigma: gi?.sigma, text: gi?.text, extra: gi?.extra }; }), distances: state.dists.map((d) => { const a = state.points.find((p) => p.id === d.a), b = state.points.find((p) => p.id === d.b); const di = a && b ? distanceInfo(a, b) : null; return { a: d.a, b: d.b, dist_model: di?.d, sigma_model: di?.sigma }; }), method: 'Deng & Qin 2026 multi-ray least-squares spatial intersection', when: new Date().toISOString() }, null, 2), 'application/json');
   $('#ex-png').onclick = () => { const gl = renderer.domElement; const c = document.createElement('canvas'); c.width = gl.width; c.height = gl.height; const x = c.getContext('2d'); x.drawImage(gl, 0, 0); x.drawImage(overlay, 0, 0, c.width, c.height); c.toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${state.file.name}.measure.png`; a.click(); }); };
@@ -974,12 +1056,14 @@ $('#btn-autorot').onclick = () => autoRotate();
 $('#live-autorot').onclick = () => setSetting('autoRotate', !state.settings.autoRotate);
 $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => (b.onclick = () => setSetting('loupeSize', b.dataset.ls)));
 $('#set-autorot').onchange = (e) => setSetting('autoRotate', e.target.checked);
-$('#set-navpad').onchange = (e) => setSetting('navpad', e.target.checked); $('#set-navstep').onchange = (e) => setSetting('navStep', Math.max(1, Math.min(90, +e.target.value || 15))); $('#btn-navpad').onclick = () => setSetting('navpad', !state.settings.navpad);
+$('#set-navpad').onchange = (e) => setSetting('navpad', e.target.checked);
+$('#set-ptsize').oninput = (e) => { setSetting('ptSize', +e.target.value); if (state.points3) state.points3.material.size = state.settings.ptSize * Math.min(window.devicePixelRatio || 1, 2); }; $('#set-cloudcolor').onchange = (e) => { setSetting('cloudColor', e.target.value); rebuildPoints(); }; $('#set-pick-splat').onchange = (e) => setSetting('pickSplat', e.target.checked); $$('input[name=pickmode]').forEach((r) => (r.onchange = (e) => setSetting('pickMode', e.target.value))); $('#set-pickr').oninput = (e) => setSetting('pickRadius', +e.target.value); $('#btn-pick-help').onclick = openPickHelp;
+$('#btn-view').onclick = (e) => { e.stopPropagation(); $('#btn-view').parentElement.classList.toggle('open'); }; document.addEventListener('click', () => $('#btn-view').parentElement.classList.remove('open')); $$('#menu-view button').forEach((b) => (b.onclick = () => { setSetting('viewMode', b.dataset.view); applyViewMode(); })); $('#set-navstep').onchange = (e) => setSetting('navStep', Math.max(1, Math.min(90, +e.target.value || 15))); $('#btn-navpad').onclick = () => setSetting('navpad', !state.settings.navpad);
 initNavpad();
 $$('#live-rotpat, #set-rotpat').forEach((el) => (el.onchange = (e) => setSetting('rotPattern', e.target.value))); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.onchange = (e) => setSetting('rotAxis', e.target.value))); $$('#live-rotstep, #set-rotstep').forEach((el) => (el.onchange = (e) => setSetting('rotStep', Math.max(0, Math.min(180, +e.target.value || 0))))); $('#set-hires').onchange = (e) => { state.loupeHiResFailed = false; setSetting('loupeHiRes', e.target.checked); }; $('#btn-undo').onclick = undoRay; $('#btn-worst').onclick = removeWorst; $('#btn-finish').onclick = () => finishPoint(); $('#btn-cancel').onclick = () => { if (state.rays.length) { cancelPoint(); toast('현재 점 측정을 취소했습니다.', 'info', 3000); } else endTask(); };
 $('#ray-table').addEventListener('click', (e) => { if (e.target.closest('[data-undo]')) undoRay(); });
 $('#pt-table').addEventListener('change', (e) => { const cb = e.target.closest('[data-sel]'); if (!cb) return; const id = +cb.dataset.sel; if (cb.checked) { if (state.selected.size >= 2) { const first = [...state.selected][0]; state.selected.delete(first); } state.selected.add(id); } else state.selected.delete(id); renderResults(); });
-$('#pt-table').addEventListener('click', (e) => { const d = e.target.closest('[data-del]'); if (!d) return; const id = +d.dataset.del; state.points = state.points.filter((p) => p.id !== id); state.dists = state.dists.filter((x) => x.a !== id && x.b !== id); state.geoms = state.geoms.filter((g) => !g.ptIds.includes(id)); state.selected.delete(id); renderResults(); });
+$('#pt-table').addEventListener('click', (e) => { const rf = e.target.closest('[data-refine]'); if (rf) { startRefine(+rf.dataset.refine); return; } const d = e.target.closest('[data-del]'); if (!d) return; const id = +d.dataset.del; state.points = state.points.filter((p) => p.id !== id); state.dists = state.dists.filter((x) => x.a !== id && x.b !== id); state.geoms = state.geoms.filter((g) => !g.ptIds.includes(id)); state.selected.delete(id); renderResults(); });
 $('#dist-table').addEventListener('click', (e) => { const d = e.target.closest('[data-ddel]'); if (!d) return; state.dists.splice(+d.dataset.ddel, 1); renderResults(); });
 $('#geom-table').addEventListener('click', (e) => { const d = e.target.closest('[data-gdel]'); if (!d) return; state.geoms.splice(+d.dataset.gdel, 1); renderResults(); });
 $('#btn-geom-finish').onclick = finishGeometry;
@@ -995,7 +1079,8 @@ function syncSettingsUI() {
   const st = state.settings;
   $('#set-n').value = st.n; $('#set-snap').checked = st.snap; $('#set-refine').checked = st.refine; $('#set-loupe').checked = st.loupe; $('#set-labels').checked = st.labels; st.zoom = Math.max(2, Math.min(5, Math.round(st.zoom * 2) / 2)); $('#set-zoom').value = st.zoom; $('#zoom-label').textContent = `${st.zoom}×`; $('#live-zoom').value = String(st.zoom); $('#set-dunit').value = st.dunit;
   $('#set-hires').checked = st.loupeHiRes; $('#set-autorot').checked = st.autoRotate;
-  $('#set-navpad').checked = st.navpad; $('#set-navstep').value = st.navStep; $('#navpad').hidden = !(st.navpad && state.mesh); $('#btn-navpad').classList.toggle('active', st.navpad);
+  $('#set-navpad').checked = st.navpad; $('#set-navstep').value = st.navStep;
+  $('#set-ptsize').value = st.ptSize; $('#ptsize-label').textContent = `${st.ptSize} px`; $('#set-cloudcolor').value = st.cloudColor; $('#set-pick-splat').checked = st.pickSplat; $$('input[name=pickmode]').forEach((r) => (r.checked = r.value === st.pickMode)); $('#opt-cluster').classList.toggle('on', st.pickMode === 'cluster'); $('#opt-nearest').classList.toggle('on', st.pickMode === 'nearest'); $('#set-pickr').value = st.pickRadius; $('#pickr-label').textContent = `${st.pickRadius} px`; $('#navpad').hidden = !(st.navpad && state.mesh); $('#btn-navpad').classList.toggle('active', st.navpad);
   $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => b.classList.toggle('on', b.dataset.ls === st.loupeSize));
   const t = $('#live-autorot'); t.textContent = st.autoRotate ? '켬' : '끔'; t.classList.toggle('on', st.autoRotate);
   $$('#live-rotpat, #set-rotpat').forEach((el) => (el.value = st.rotPattern)); $$('#live-rotaxis, #set-rotaxis').forEach((el) => (el.value = st.rotAxis)); $$('#live-rotstep, #set-rotstep').forEach((el) => { el.value = st.rotStep > 0 ? st.rotStep : ''; el.placeholder = `자동 ${autoStepDeg().toFixed(0)}°`; });
@@ -1015,10 +1100,10 @@ document.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) lo
 let down = null;
 document.addEventListener('pointerdown', (e) => { if (e.target !== renderer?.domElement || e.button !== 0) return; down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
 // 클릭 vs 드래그는 이동 거리로만 판정 (느린 렌더링 중 길게 눌러도 클릭으로 인정)
-document.addEventListener('pointerup', (e) => { if (!down || e.button !== 0) return; const mv = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (mv < 5 && state.task && e.target === renderer.domElement) { const r = renderer.domElement.getBoundingClientRect(); onMeasureClick(e.clientX - r.left, e.clientY - r.top); } });
+document.addEventListener('pointerup', (e) => { if (!down || e.button !== 0) return; const mv = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (mv < 5 && state.task && e.target === renderer.domElement) { const r = renderer.domElement.getBoundingClientRect(); state.forceRay = e.shiftKey; onMeasureClick(e.clientX - r.left, e.clientY - r.top); state.forceRay = false; } });
 document.addEventListener('pointermove', (e) => { if (!renderer) return; const r = renderer.domElement.getBoundingClientRect(); state.mouse.x = e.clientX - r.left; state.mouse.y = e.clientY - r.top; state.mouse.inside = e.target === renderer.domElement; });
 // 키
-document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (k === 'a' && !e.ctrlKey && !e.metaKey) $$('#menu-analyze button')[0].click(); else if (k === 'l') $$('#menu-analyze button')[1].click(); else if (k === 'p') $$('#menu-analyze button')[2].click(); else if (e.key === 'Enter') { if (state.task && GEOM_NEED[state.task.kind] && state.rays.length === 0) finishGeometry(); else finishPoint(); } else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(5, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
+document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (e.key === 'Tab' && state.mesh) { e.preventDefault(); setSetting('viewMode', state.settings.viewMode === 'splat' ? 'cloud' : 'splat'); applyViewMode(); toast(`보기: <b>${state.settings.viewMode === 'cloud' ? '점군 — 클릭 한 번으로 점 선택(직접선택)' : '스플랫 — 다시점 클릭 측정'}</b>`, 'info', 2500); return; } if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (k === 'a' && !e.ctrlKey && !e.metaKey) $$('#menu-analyze button')[0].click(); else if (k === 'l') $$('#menu-analyze button')[1].click(); else if (k === 'p') $$('#menu-analyze button')[2].click(); else if (e.key === 'Enter') { if (state.task && GEOM_NEED[state.task.kind] && state.rays.length === 0) finishGeometry(); else finishPoint(); } else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(5, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
 function resetAll(keepFile) { state.points = []; state.dists = []; state.geoms = []; state.selected.clear(); state.nextId = 1; state.task = null; cancelPoint(false); $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active')); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; renderResults(); }
 function runTour() { document.getElementById('app').classList.add('tour-active'); startTour(TOUR_STEPS, { onDone: () => { document.getElementById('app').classList.remove('tour-active'); try { localStorage.setItem('gsm.tourSeen', '1'); } catch (_) {} } }); }
 
@@ -1037,7 +1122,7 @@ window.__app = {
   setCamera(pos, target, up) { if (up) camera.up.set(...up); camera.position.set(...pos); controls.target.set(...target); controls.update(); renderer.render(scene, camera); },
   project(p) { return project(new THREE.Vector3(...p)); },
   click(px, py) { onMeasureClick(px, py); },
-  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, navAction, geomInfo, addGeom, distanceDecomp, finishGeometry, taskPointAdded, propagate, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
+  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, navAction, directPick, addPickedPoint, applyViewMode, startRefine, geomInfo, addGeom, distanceDecomp, finishGeometry, taskPointAdded, propagate, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
   debugAddPoint(xyz, name) { const p = { id: state.nextId++, name: name || `P${state.nextId - 1}`, p: new THREE.Vector3(...xyz), sigma0: 1e-4, cov: new THREE.Matrix3().identity().multiplyScalar(1e-8), n: 5, quality: 'good', pxRms: 0.1, maxAngleDeg: 60, rays: [] }; state.points.push(p); renderResults(); return p; },
   openGcpCalib, setGcp(name, xyz) { state.gcpInputs[name] = { x: xyz[0], y: xyz[1], z: xyz[2] }; }, openChecklist, openCalibWizard, applyManualScale(s) { state.unit = { known: true, factor: s, sigmaRel: 0, source: 'test' }; applyUnitUI(); },
   distanceInfo, intersectRays, render() { renderer.render(scene, camera); drawOverlay(); },
