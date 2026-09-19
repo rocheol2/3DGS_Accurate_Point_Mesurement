@@ -56877,7 +56877,7 @@ void main() {
     selected: /* @__PURE__ */ new Set(),
     nextId: 1,
     nextGeomId: 1,
-    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 2, ptMode: "gauss", ptScale: 0.7, hideBig: true, cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, dunit: "auto", labels: true },
+    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 2, ptMode: "gauss", ptScale: 0.7, ptMaxPx: 6, hideBig: true, cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, dunit: "auto", labels: true },
     autoPivot: null,
     autoAngleDeg: 0,
     autoTiltDeg: 0,
@@ -57819,7 +57819,7 @@ void main() {
     m.uniforms.uPx.value = st.ptSize * dpr;
     m.uniforms.uScale.value = st.ptScale;
     m.uniforms.uMinPx.value = Math.max(1, st.ptSize * 0.5) * dpr;
-    m.uniforms.uMaxPx.value = 24 * dpr;
+    m.uniforms.uMaxPx.value = Math.max(1, st.ptMaxPx || 6) * dpr;
     m.uniforms.uHideBig.value = st.hideBig ? 1 : 0;
     m.uniforms.uBigRad.value = state.cloud?.bigRad ?? 1e30;
   }
@@ -57854,6 +57854,7 @@ void main() {
     if (state.mesh) state.mesh.visible = mode !== "cloud" || !state.points3;
     if (state.points3) state.points3.visible = mode !== "splat";
     $("#view-label").textContent = names[mode] || mode;
+    $("#cloud-quick").hidden = !(mode !== "splat" && state.points3);
     $$("#menu-view button").forEach((b) => b.classList.toggle("on", b.dataset.view === mode));
     if (mode !== "splat" && !state.points3 && state.mesh) toast("\uC774 \uD30C\uC77C\uC5D0\uC11C\uB294 \uC810\uAD70\uC744 \uB9CC\uB4E4 \uC218 \uC5C6\uC5B4 \uC2A4\uD50C\uB7AB\uC73C\uB85C \uD45C\uC2DC\uD569\uB2C8\uB2E4.", "warn", 4e3);
   }
@@ -59292,6 +59293,9 @@ void main() {
   $("#set-navpad").onchange = (e) => setSetting("navpad", e.target.checked);
   $("#set-ptsize").oninput = (e) => setSetting("ptSize", +e.target.value);
   $("#set-ptmode").onchange = (e) => setSetting("ptMode", e.target.value);
+  $$("#set-ptmax, #q-ptmax").forEach((el) => el.oninput = (e) => setSetting("ptMaxPx", +e.target.value));
+  $("#q-ptscale").oninput = (e) => setSetting("ptScale", +e.target.value);
+  $("#q-ptmode").onchange = (e) => setSetting("ptMode", e.target.value);
   $("#set-hidebig").onchange = (e) => setSetting("hideBig", e.target.checked);
   $("#set-ptscale").oninput = (e) => setSetting("ptScale", +e.target.value);
   $("#set-cloudcolor").onchange = (e) => {
@@ -59433,8 +59437,14 @@ void main() {
     $("#set-ptsize").value = st.ptSize;
     $("#ptsize-label").textContent = `${st.ptSize} px`;
     $("#set-ptmode").value = st.ptMode;
+    $("#q-ptmode").value = st.ptMode;
     $("#set-hidebig").checked = st.hideBig;
     $("#set-ptscale").value = st.ptScale;
+    $("#q-ptscale").value = st.ptScale;
+    $$("#set-ptmax, #q-ptmax").forEach((el) => el.value = st.ptMaxPx);
+    $$("#ptmax-label, #q-ptmax-label").forEach((el) => el.textContent = `${st.ptMaxPx} px`);
+    $("#q-ptscale-label").textContent = `${st.ptScale}\xD7`;
+    $("#cloud-quick").hidden = !(st.viewMode !== "splat" && state.points3);
     $("#ptscale-label").textContent = `${st.ptScale}\xD7`;
     $("#row-ptsize").style.opacity = st.ptMode === "gauss" ? ".55" : "1";
     $("#row-ptscale").style.opacity = st.ptMode === "gauss" ? "1" : ".55";
@@ -59560,6 +59570,9 @@ void main() {
       else if (e.key === "ArrowLeft") autoOrbit(-st, "h");
       else if (e.key === "ArrowUp") autoOrbit(Math.min(st, 45), "v");
       else autoOrbit(-Math.min(st, 45), "v");
+    } else if ((e.key === "-" || e.key === "=" || e.key === "+") && state.points3 && state.settings.viewMode !== "splat") {
+      setSetting("ptMaxPx", Math.max(1, Math.min(24, state.settings.ptMaxPx + (e.key === "-" ? -1 : 1))));
+      toast(`\uC810\uAD70 \uCD5C\uB300 \uC810 \uD06C\uAE30 ${state.settings.ptMaxPx} px`, "info", 1200);
     } else if (e.key === "[" || e.key === "]") setSetting("zoom", Math.max(2, Math.min(5, state.settings.zoom + (e.key === "]" ? 0.5 : -0.5))));
   });
   function resetAll(keepFile) {
