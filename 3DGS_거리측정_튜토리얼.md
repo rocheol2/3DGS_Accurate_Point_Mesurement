@@ -138,8 +138,11 @@ python3 ~/storage/Cesium/tools/gs_ply_georef.py apply \
   --out  ~/storage/Cesium/data/ds003/ds003_metric.ply \
   --scale 9.742857245006276 \
   --rotation-2d -0.99408435 -0.10861084 0.10861084 -0.99408435 \
-  --translation 285889.063 121060.398 0
+  --translation 285889.063 121060.398 0 \
+  --cameras <DS003 로컬좌표 학습결과>/cameras.json   # 위 방향을 학습 카메라로 판단해 헤더에 기록
 ```
+
+> ⚠ 2026-10-03 수정: 이전 버전의 `apply` 는 회전을 주지 않아도 헤더에 무조건 `up axis: z` 를 써서, 위가 −Z 인 DS003 모델이 뷰어에서 뒤집혀 보였습니다. 지금은 `--up-axis` 또는 `--cameras` 를 줄 때만 기록합니다(DS003 CM002 는 학습 카메라 기준 −Z).
 
 - 큰 국가좌표(28만 m)를 float32 PLY 에 그대로 쓰면 정밀도가 3 cm 로 깨집니다(CMP002 보고서에서 확인한 바로 그 문제). 그래서 `apply` 는 좌표 중앙값이 5 km 를 넘으면 **자동으로 로컬 원점을 빼고**(`--local-origin auto`) 메타 JSON 에 원점을 기록합니다. 실좌표 = PLY좌표 + 원점.
 - 거리만 필요하면 `--rotation-2d`/`--translation` 을 생략하고 `--scale` 만 줘도 됩니다(거리는 축척에만 의존).
@@ -297,7 +300,7 @@ python3 ~/storage/Cesium/tools/measure_distance.py points.csv --calibrate 1 2 12
    - 근본: PLY 를 다시 스케일하고 3~4단계를 다시 돌립니다.
      ```bash
      python3 ~/storage/Cesium/tools/gs_ply_georef.py apply --ply ~/storage/Cesium/data/site01/site01_enu.ply \
-       --out ~/storage/Cesium/data/site01/site01_enu_cal.ply --scale <s> --local-origin 0 0 0
+       --out ~/storage/Cesium/data/site01/site01_enu_cal.ply --scale <s> --local-origin 0 0 0 --up-axis z   # ENU 파일이므로 z 가 위
      ```
 5. 가능하면 **서로 다른 방향·길이의 기준 구간 2~3개**로 확인하세요. 축척이 방향에 따라 다르면(드리프트) COLMAP 재구성 자체의 문제이므로 GCP 를 더 넣어 재구성하는 것이 맞습니다.
 

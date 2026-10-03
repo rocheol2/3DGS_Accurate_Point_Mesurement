@@ -32,5 +32,7 @@
     0.0
   ],
   "sh_rotated": true,
-  "ply_axes": "x=East, y=North, z=Up (meters)"
+  "ply_axes": "units meters; COLMAP 로컬 좌표계에 축척만 적용(회전 없음); up axis -z",
+  "up_axis": "-z",
+  "up_axis_note": "cameras.json 학습 카메라 1415대 기준 (−Z 와 9.7° 차이). 2026-10-03 수정: 이전 헤더의 \"up axis: z\" 와 ply_axes 의 \"z=Up\" 은 gs_ply_georef.py apply 모드 버그로 잘못 기록된 값"
 }
