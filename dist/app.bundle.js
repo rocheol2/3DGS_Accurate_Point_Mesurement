@@ -56690,6 +56690,18 @@ void main() {
       title: "\uC88C\uD45C \uAC12\uC774 \uB9E4\uC6B0 \uCEE4\uC11C \uBDF0\uC5B4 \uB0B4\uBD80 \uC6D0\uC810\uC744 \uC62E\uACBC\uC2B5\uB2C8\uB2E4 (\uD45C\uC2DC \uC88C\uD45C\uB294 \uC6D0\uB798 \uAC12)",
       why: "\uC9C0\uC5ED\xB7\uAD6D\uAC00 \uC88C\uD45C\uACC4(\uC608: X\u2248285,000 m)\uB85C \uB9CC\uB4E0 \uD30C\uC77C\uC740 GPU \uAC00 \uC4F0\uB294 float32 \uB85C\uB294 \uADF8 \uD06C\uAE30\uC5D0\uC11C \uC57D 3 cm \uAC04\uACA9\uBC16\uC5D0 \uD45C\uD604\uD558\uC9C0 \uBABB\uD574 \uB80C\uB354\uB9C1\uC774 \uAE68\uC9C0\uAC70\uB098 \uC5F4\uB9AC\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uADF8\uB798\uC11C \uBDF0\uC5B4\uAC00 \uD30C\uC77C\uC744 \uC77D\uC73C\uBA74\uC11C \uBAA8\uB4E0 \uC88C\uD45C\uC5D0\uC11C \uC77C\uC815\uD55C \uAC12(\uC624\uD504\uC14B)\uC744 \uBE7C \uC6D0\uC810 \uADFC\uCC98\uB85C \uC62E\uAE34 \uB4A4 \uB80C\uB354\uB9C1\uD569\uB2C8\uB2E4.",
       fix: "\uBCC4\uB3C4 \uC870\uCE58\uAC00 \uD544\uC694 \uC5C6\uC2B5\uB2C8\uB2E4. \uD654\uBA74\uC5D0 \uD45C\uC2DC\uB418\uB294 \uC88C\uD45C, \uB0B4\uBCF4\uB0B4\uAE30(CSV/JSON), \uAE30\uC900\uC810(GCP) \uBCF4\uC815 \uC785\uB825\uC740 \uBAA8\uB450 \uC624\uD504\uC14B\uC744 \uB2E4\uC2DC \uB354\uD55C \uC6D0\uB798 \uC88C\uD45C\uB97C \uC0AC\uC6A9\uD569\uB2C8\uB2E4. \uC624\uD504\uC14B \uAC12\uC740 [\uC815\uBCF4 \uC810\uAC80]\uC5D0\uC11C \uBCFC \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+    },
+    E15: {
+      level: "warn",
+      title: "\uD30C\uC77C\uC5D0 \uC801\uD78C \uC704 \uBC29\uD5A5\uC774 \uC2E4\uC81C\uC640 \uBC18\uB300\uC5EC\uC11C \uC790\uB3D9\uC73C\uB85C \uBC14\uB85C\uC7A1\uC558\uC2B5\uB2C8\uB2E4",
+      why: "PLY \uD5E4\uB354(\uB610\uB294 \uD568\uAED8 \uB193\uC740 JSON)\uC5D0 \uC801\uD78C \uC704 \uBC29\uD5A5\uACFC, \uC7A5\uBA74 \uC790\uCCB4(\uC9C0\uBA74 \uBC95\uC120\uACFC \uB192\uC774 \uBD84\uD3EC) \uB610\uB294 \uD559\uC2B5 \uCE74\uBA54\uB77C \uC704\uCE58\uB85C \uD310\uB2E8\uD55C \uC704 \uBC29\uD5A5\uC774 \uBC18\uB300\uC785\uB2C8\uB2E4. \uADF8\uB300\uB85C \uC4F0\uBA74 \uD654\uBA74\uC774 \uB4A4\uC9D1\uD600 \uBCF4\uC774\uACE0, \uC704\xB7\uC544\uB798\uB85C \uB3CC\uB9B4 \uB54C \uD68C\uC804\uC774 \uD55C\uACC4\uC5D0\uC11C \uBA48\uCDA5\uB2C8\uB2E4.",
+      fix: "\uD310\uB2E8\uB41C \uBC29\uD5A5\uC744 \uC801\uC6A9\uD588\uC2B5\uB2C8\uB2E4. \uADF8\uB798\uB3C4 \uB4A4\uC9D1\uD600 \uBCF4\uC774\uBA74 [\u2912 \uC704 \uBC29\uD5A5] \uBA54\uB274\uC758 [\u21C5 \uC704\uC544\uB798 \uB4A4\uC9D1\uAE30] \uB610\uB294 U \uD0A4\uB97C \uB204\uB974\uC138\uC694. \uD559\uC2B5 \uD3F4\uB354\uC758 cameras.json \uC744 PLY \uC640 \uD568\uAED8 \uB04C\uC5B4\uB2E4 \uB193\uC73C\uBA74 \uCE74\uBA54\uB77C \uAE30\uC900\uC73C\uB85C \uAC00\uC7A5 \uC815\uD655\uD558\uAC8C \uC815\uD574\uC9D1\uB2C8\uB2E4."
+    },
+    E16: {
+      level: "info",
+      title: "\uC704\xB7\uC544\uB798\uB85C \uB354 \uB3CC\uC544\uAC00\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4 (\uD68C\uC804 \uD55C\uACC4)",
+      why: '\uD654\uBA74 \uD68C\uC804\uC740 "\uC704 \uBC29\uD5A5" \uCD95\uC744 \uAE30\uC900\uC73C\uB85C \uD558\uBA70, \uBC14\uB85C \uC704(\uCC9C\uC815)\uB098 \uBC14\uB85C \uC544\uB798\uB97C \uB118\uC5B4\uAC08 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4. \uC704 \uBC29\uD5A5\uC774 \uC2E4\uC81C\uC640 \uBC18\uB300\uB85C \uC7A1\uD600 \uC788\uC73C\uBA74 \uB4A4\uC9D1\uD78C \uD654\uBA74\uC744 \uB4DC\uB798\uADF8\uB85C \uBC14\uB85C \uC138\uC6B8 \uC218 \uC5C6\uC5B4 \uD68C\uC804\uC774 \uBA48\uCD98 \uAC83\uCC98\uB7FC \uBCF4\uC785\uB2C8\uB2E4.',
+      fix: "\uD654\uBA74\uC774 \uB4A4\uC9D1\uD600 \uBCF4\uC774\uBA74 [\u21C5 \uC704\uC544\uB798 \uB4A4\uC9D1\uAE30](U \uD0A4, \uC870\uC791 \uD328\uB110 \uC81C\uBAA9\uC904\uC758 \u21C5). \uC7A5\uBA74\uC774 \uC606\uC73C\uB85C \uB204\uC6CC \uC788\uC73C\uBA74 [\u2912 \uC704 \uBC29\uD5A5] \uBA54\uB274\uC5D0\uC11C \uCD95\uC744 \uACE0\uB974\uC138\uC694."
     }
   };
   var QUALITY = {
@@ -56951,10 +56963,28 @@ void main() {
       camera.updateProjectionMatrix();
     }
   }
+  var lastPoleHint = -Infinity;
+  function poleHint() {
+    const now = performance.now();
+    if (now - lastPoleHint < 3e4) return;
+    lastPoleHint = now;
+    showError("E16", `\uD604\uC7AC \uC704 \uBC29\uD5A5: ${$("#up-label").textContent}`, { ttl: 2e4, actions: '<div class="btnrow"><button class="btn small primary" data-act="flip">\u21C5 \uC704\uC544\uB798 \uB4A4\uC9D1\uAE30 (U)</button></div>', onAction: (a) => {
+      if (a === "flip") flipUp();
+    } });
+  }
+  function checkPole() {
+    if (!state.mesh || !state.dragging) return;
+    const off = camera.position.clone().sub(controls.target);
+    const L = off.length();
+    if (L < 1e-9) return;
+    const phi = Math.acos(MathUtils.clamp(off.dot(camera.up) / L, -1, 1));
+    if (phi > Math.PI - 0.03) poleHint();
+  }
   function loop() {
     requestAnimationFrame(loop);
     tickAnimations();
     controls.update();
+    checkPole();
     if (state.bounds) updateClipPlanes();
     if (state.mesh || state.points3) renderer.render(scene, camera);
     drawOverlay();
@@ -57008,8 +57038,81 @@ void main() {
       controls._quatInverse.copy(controls._quat).invert();
     }
     const names = { "0,-1,0": "\u2212Y", "0,1,0": "+Y", "0,0,1": "+Z", "0,0,-1": "\u2212Z", "1,0,0": "+X", "-1,0,0": "\u2212X" };
-    $("#up-label").textContent = names[[v.x, v.y, v.z].join(",")] || "\uC0AC\uC6A9\uC790";
+    const u = camera.up;
+    $("#up-label").textContent = names[[u.x, u.y, u.z].map((q) => Math.abs(q) < 1e-9 ? 0 : q).join(",")] || `(${u.x.toFixed(2)}, ${u.y.toFixed(2)}, ${u.z.toFixed(2)})`;
     if (state.bounds) frameAll();
+  }
+  function flipUp() {
+    if (!state.mesh) return;
+    setUp(camera.up.clone().negate(), `${(state.upSource || "\uAE30\uBCF8\uAC12").replace(/ → 뒤집음$/, "")} \u2192 \uB4A4\uC9D1\uC74C`);
+    toast(`\uC704 \uBC29\uD5A5\uC744 \uB4A4\uC9D1\uC5C8\uC2B5\uB2C8\uB2E4: <b>${$("#up-label").textContent}</b>`, "info", 2500);
+  }
+  function snapAxis(v) {
+    const a = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].map((q) => new Vector3(...q));
+    let best = a[0], bd = -2;
+    for (const q of a) {
+      const d = q.dot(v);
+      if (d > bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    return bd > Math.cos(20 * DEG) ? best.clone() : v.clone().normalize();
+  }
+  function estimateUpFromData() {
+    const C = state.centers;
+    if (!C || C.length < 300) return null;
+    const n = C.length / 3;
+    const xs = [], ys = [], zs = [];
+    for (let i = 0; i < n; i++) {
+      xs.push(C[3 * i]);
+      ys.push(C[3 * i + 1]);
+      zs.push(C[3 * i + 2]);
+    }
+    const med = (a) => Float64Array.from(a).sort()[Math.floor(a.length / 2)];
+    const c = [med(xs), med(ys), med(zs)];
+    const r = new Float64Array(n);
+    for (let i = 0; i < n; i++) r[i] = Math.hypot(xs[i] - c[0], ys[i] - c[1], zs[i] - c[2]);
+    const r90 = Float64Array.from(r).sort()[Math.floor(n * 0.9)];
+    const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    let m = 0;
+    for (let i = 0; i < n; i++) {
+      if (r[i] > r90) continue;
+      const d = [xs[i] - c[0], ys[i] - c[1], zs[i] - c[2]];
+      for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) M[a][b] += d[a] * d[b];
+      m++;
+    }
+    const { vals, vecs } = jacobiSym(M);
+    const order = [0, 1, 2].sort((a, b) => vals[a] - vals[b]);
+    const nrm = new Vector3(...vecs[order[0]]).normalize();
+    const flat = vals[order[0]] / Math.max(1e-12, vals[order[1]]);
+    const h = new Float64Array(n);
+    for (let i = 0; i < n; i++) h[i] = (xs[i] - c[0]) * nrm.x + (ys[i] - c[1]) * nrm.y + (zs[i] - c[2]) * nrm.z;
+    const hm = med(h);
+    const mad = med(Array.from(h, (q) => Math.abs(q - hm))) * 1.4826;
+    let up = 0, dn = 0;
+    for (const q of h) {
+      if (q > hm + 3 * mad) up++;
+      else if (q < hm - 3 * mad) dn++;
+    }
+    const A = (up - dn) / Math.max(1, up + dn);
+    const axis = nrm.clone().multiplyScalar(A >= 0 ? 1 : -1);
+    return { axis, snapped: snapAxis(axis), flat, A, confident: flat < 0.1 && Math.abs(A) > 0.5 };
+  }
+  function upFromCameras(cams) {
+    const v = new Vector3();
+    for (const c of cams) {
+      const R = c.rotation;
+      v.x += -R[0][1] - R[0][2];
+      v.y += -R[1][1] - R[1][2];
+      v.z += -R[2][1] - R[2][2];
+    }
+    return v.lengthSq() > 1e-12 ? v.normalize() : null;
+  }
+  function axisName(v) {
+    const s = snapAxis(v);
+    const nm = { "1,0,0": "+X", "-1,0,0": "\u2212X", "0,1,0": "+Y", "0,-1,0": "\u2212Y", "0,0,1": "+Z", "0,0,-1": "\u2212Z" }[[s.x, s.y, s.z].map(Math.round).join(",")];
+    return nm && s.dot(v) > 0.999 ? nm : `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
   }
   function autoStepDeg() {
     return state.settings.rotStep > 0 ? state.settings.rotStep : 350 / Math.max(2, state.settings.n);
@@ -57163,6 +57266,7 @@ void main() {
       const cand = off.clone().applyQuaternion(new Quaternion().setFromAxisAngle(right, -dvDeg * DEG));
       const phi = Math.acos(MathUtils.clamp(cand.clone().normalize().dot(up), -1, 1)) / DEG;
       if (phi > 4 && phi < 176) off.copy(cand);
+      else poleHint();
     }
     camera.position.copy(pivot).add(off);
     camera.lookAt(pivot);
@@ -57652,7 +57756,7 @@ void main() {
       }
     });
     $("#toasts").appendChild(t);
-    const ttl = e.level === "block" ? 0 : e.level === "warn" ? 14e3 : 8e3;
+    const ttl = opts.ttl ?? (e.level === "block" ? 0 : e.level === "warn" ? 14e3 : 8e3);
     if (ttl) setTimeout(() => t.remove(), ttl);
     updateCheckDot();
     return t;
@@ -57918,6 +58022,12 @@ void main() {
     }
     const cl = state.cloud;
     if (!cl) return;
+    if (state.settings.viewMode === "splat") {
+      state.denseInfo = null;
+      updateDenseLabel();
+      applyViewMode();
+      return;
+    }
     if (cl.rad && cl.bigRad == null) {
       const sorted = Float32Array.from(cl.rad).sort();
       cl.bigRad = sorted[Math.floor(cl.n * 0.99)];
@@ -57949,6 +58059,15 @@ void main() {
   function applyViewMode() {
     const mode = state.settings.viewMode;
     const names = { splat: "\uC2A4\uD50C\uB7AB", cloud: "\uC810\uAD70", both: "\uACB9\uCE68" };
+    if (mode !== "splat" && !state.points3 && state.cloud && !state.buildingPoints) {
+      state.buildingPoints = true;
+      try {
+        rebuildPoints();
+      } finally {
+        state.buildingPoints = false;
+      }
+      return;
+    }
     if (state.mesh) state.mesh.visible = mode !== "cloud" || !state.points3;
     if (state.points3) state.points3.visible = mode !== "splat";
     $("#view-label").textContent = names[mode] || mode;
@@ -58138,7 +58257,7 @@ void main() {
     const files = Array.from(fileList || []);
     if (!files.length) return;
     const main = files.find((f) => /\.(ply|spz|splat|ksplat|sog|zip)$/i.test(f.name));
-    const side = files.find((f) => /\.json$/i.test(f.name));
+    const jsons = files.filter((f) => /\.json$/i.test(f.name));
     if (!main) {
       showError("E02", `\uB193\uC740 \uD30C\uC77C: ${files.map((f) => f.name).join(", ")}`);
       return;
@@ -58255,24 +58374,43 @@ void main() {
       }
       return out.subarray(0, m * 3);
     })() : state.cloud.pos;
-    const upFromHeader = header?.upAxis ? { "+z": [0, 0, 1], "-z": [0, 0, -1], "+y": [0, 1, 0], "-y": [0, -1, 0], "+x": [1, 0, 0], "-x": [-1, 0, 0] }[header.upAxis] : null;
-    if (upFromHeader) setUp(new Vector3(...upFromHeader), "PLY \uD5E4\uB354(up axis)");
-    else if (state.coordOffset) {
-      setUp(new Vector3(0, 0, 1), "\uD070 \uC88C\uD45C(\uC9C0\uC624\uB9AC\uD37C\uB7F0\uC2F1) \uD30C\uC77C \u2192 +Z \uCD94\uC815");
-      showError("E06", "\uC9C0\uC5ED\xB7\uAD6D\uAC00 \uC88C\uD45C\uACC4 \uD30C\uC77C\uC740 \uBCF4\uD1B5 Z \uAC00 \uB192\uC774\uC774\uBBC0\uB85C +Z \uB85C \uAC00\uC815\uD588\uC2B5\uB2C8\uB2E4.");
+    let sidecar = null, cams = null;
+    for (const jf of jsons) {
+      try {
+        const j = JSON.parse(await jf.text());
+        if (Array.isArray(j) && j.length && j[0].rotation && j[0].position) cams = j;
+        else if (j && typeof j === "object" && !sidecar) sidecar = j;
+      } catch (e) {
+        showError("E12", `${jf.name}: JSON \uAD6C\uBB38 \uC624\uB958 ${String(e).slice(0, 80)}`);
+      }
+    }
+    const AX = { "+z": [0, 0, 1], "-z": [0, 0, -1], "+y": [0, 1, 0], "-y": [0, -1, 0], "+x": [1, 0, 0], "-x": [-1, 0, 0] };
+    const sideUp = sidecar && typeof sidecar.up_axis === "string" ? AX[(/^[+-]/.test(sidecar.up_axis) ? "" : "+") + sidecar.up_axis.toLowerCase().replace("\u2212", "-")] : null;
+    const declared = header?.upAxis ? { v: AX[header.upAxis], src: `PLY \uD5E4\uB354(up axis: ${header.upAxis})` } : sideUp ? { v: sideUp, src: `JSON(up_axis: ${sidecar.up_axis})` } : null;
+    const est = estimateUpFromData();
+    const camUp = cams ? upFromCameras(cams) : null;
+    state.upEstimate = est ? { axis: est.axis.toArray(), flat: est.flat, A: est.A, confident: est.confident } : null;
+    if (camUp) {
+      const v = snapAxis(camUp);
+      setUp(v, `\uD559\uC2B5 \uCE74\uBA54\uB77C ${cams.length}\uB300(cameras.json)`);
+      if (declared && new Vector3(...declared.v).dot(v) < -0.5) showError("E15", `${declared.src} \u2194 \uCE74\uBA54\uB77C \uAE30\uC900 ${axisName(v)} \u2192 ${axisName(v)} \uC801\uC6A9`);
+    } else if (declared) {
+      const dv = new Vector3(...declared.v);
+      if (est && est.confident && dv.dot(est.axis) < -0.5) {
+        setUp(est.snapped, `\uB370\uC774\uD130 \uCD94\uC815 (${declared.src} \uC640 \uBC18\uB300\uC5EC\uC11C \uBCF4\uC815)`);
+        showError("E15", `${declared.src} \u2194 \uC7A5\uBA74 \uBD84\uC11D ${axisName(est.snapped)} (\uD3C9\uD0C4\uB3C4 ${est.flat.toFixed(2)}, \uC3E0\uB9BC ${est.A.toFixed(2)}) \u2192 ${axisName(est.snapped)} \uC801\uC6A9`);
+      } else setUp(dv, declared.src);
+    } else if (est && est.confident) {
+      setUp(est.snapped, `\uB370\uC774\uD130 \uCD94\uC815(\uC9C0\uBA74 \uBC95\uC120, \uD3C9\uD0C4\uB3C4 ${est.flat.toFixed(2)})`);
+      showError("E06", `\uD30C\uC77C\uC5D0 \uC704 \uBC29\uD5A5 \uC815\uBCF4\uAC00 \uC5C6\uC5B4 \uC7A5\uBA74 \uBD84\uC11D\uC73C\uB85C ${axisName(est.snapped)} \uB97C \uC704\uB85C \uC815\uD588\uC2B5\uB2C8\uB2E4.`);
+    } else if (state.coordOffset && est && est.flat < 0.2) {
+      setUp(est.snapped, "\uD070 \uC88C\uD45C \uD30C\uC77C: \uC7A5\uBA74 \uBD84\uC11D(\uBD80\uD638 \uBD88\uD655\uC2E4)");
+      showError("E06", `\uC9C0\uC5ED\xB7\uAD6D\uAC00 \uC88C\uD45C\uACC4 \uD30C\uC77C\uC774\uB77C \uC7A5\uBA74\uC758 \uAC00\uC7A5 \uC587\uC740 \uCD95 ${axisName(est.snapped)} \uB97C \uC704\uB85C \uAC00\uC815\uD588\uC2B5\uB2C8\uB2E4. \uB4A4\uC9D1\uD600 \uBCF4\uC774\uBA74 U \uD0A4.`);
     } else {
       setUp(new Vector3(...ext === "spz" ? [0, 1, 0] : [0, -1, 0]), null);
       showError("E06", `\uD604\uC7AC \uAC00\uC815: ${ext === "spz" ? "+Y (SPZ \uAD00\uB840)" : "\u2212Y (COLMAP 3DGS \uAD00\uB840)"}`);
     }
     frameAll();
-    let sidecar = null;
-    if (side) {
-      try {
-        sidecar = JSON.parse(await side.text());
-      } catch (e) {
-        showError("E12", `JSON \uAD6C\uBB38 \uC624\uB958: ${String(e).slice(0, 80)}`);
-      }
-    }
     resolveUnits(header, sidecar);
     $("#loading").hidden = true;
     $("#dropzone").classList.add("hidden");
@@ -58991,6 +59129,7 @@ void main() {
       if (state.unit.known) it("ok", "\uCD95\uCC99 (1 u \u2192 m)", `${state.unit.source} \xB7 1 u = ${state.unit.factor.toPrecision(6)} m${state.unit.sigmaRel ? ` \xB7 \uCD95\uCC99 \uC0C1\uB300 \uBD88\uD655\uB3C4 \u2248 ${(state.unit.sigmaRel * 100).toFixed(1)} %` : ""}`);
       else it("warn", "\uCD95\uCC99 (1 u \u2192 m)", ERRORS.E05.why, ERRORS.E05.fix);
       if (state.coordOffset) it("ok", "\uC88C\uD45C \uC6D0\uC810 \uC774\uB3D9", `\uD30C\uC77C \uC88C\uD45C\uAC00 \uCEE4\uC11C \uBDF0\uC5B4 \uB0B4\uBD80\uC5D0\uC11C (${state.coordOffset.join(", ")}) \uB97C \uBE90\uC2B5\uB2C8\uB2E4. \uD45C\uC2DC\xB7\uB0B4\uBCF4\uB0B4\uAE30 \uC88C\uD45C\uB294 \uC6D0\uB798 \uAC12\uC785\uB2C8\uB2E4.`);
+      if (state.upEstimate) it(state.upEstimate.confident ? "ok" : "na", "\uC704 \uBC29\uD5A5 \uC7A5\uBA74 \uBD84\uC11D", `\uCD94\uC815 ${axisName(new Vector3(...state.upEstimate.axis))} \xB7 \uD3C9\uD0C4\uB3C4 ${state.upEstimate.flat.toFixed(2)} (0.1 \uBBF8\uB9CC = \uD3C9\uD3C9) \xB7 \uC704\uCABD \uC3E0\uB9BC ${state.upEstimate.A.toFixed(2)} (|0.5| \uCD08\uACFC = \uB69C\uB837) \u2192 ${state.upEstimate.confident ? "\uD655\uC2E4" : "\uBD88\uD655\uC2E4(\uC0AC\uC6A9 \uC548 \uD568)"}`);
       it(state.upSource ? "ok" : "warn", "\uC704(\u4E0A) \uBC29\uD5A5", state.upSource ? `${state.upSource}: ${$("#up-label").textContent}` : `\uC815\uBCF4 \uC5C6\uC74C \u2192 ${$("#up-label").textContent} \uAC00\uC815 (\uCE21\uC815 \uC815\uD655\uB3C4 \uBB34\uAD00)`, state.upSource ? "" : ERRORS.E06.fix);
     }
     if (state.task) {
@@ -59383,7 +59522,9 @@ void main() {
     $("#btn-up").parentElement.classList.toggle("open");
   };
   document.addEventListener("click", () => $("#btn-up").parentElement.classList.remove("open"));
-  $$("#menu-up button").forEach((b) => b.onclick = () => setUp(new Vector3(...b.dataset.up.split(",").map(Number)), "\uC0AC\uC6A9\uC790 \uC120\uD0DD"));
+  $$("#menu-up button[data-up]").forEach((b) => b.onclick = () => setUp(new Vector3(...b.dataset.up.split(",").map(Number)), "\uC0AC\uC6A9\uC790 \uC120\uD0DD"));
+  $("#up-flip").onclick = flipUp;
+  $("#nav-flip").onclick = flipUp;
   $("#btn-autorot").onclick = () => autoRotate();
   $("#live-autorot").onclick = () => setSetting("autoRotate", !state.settings.autoRotate);
   $$("#live-loupe-size button, #set-loupe-size button").forEach((b) => b.onclick = () => setSetting("loupeSize", b.dataset.ls));
@@ -59633,7 +59774,11 @@ void main() {
   document.addEventListener("pointerdown", (e) => {
     if (e.target !== renderer?.domElement || e.button !== 0) return;
     down = { x: e.clientX, y: e.clientY, t: performance.now() };
+    state.dragging = true;
   });
+  document.addEventListener("pointerup", () => {
+    state.dragging = false;
+  }, true);
   document.addEventListener("pointerup", (e) => {
     if (!down || e.button !== 0) return;
     const mv = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t;
@@ -59659,6 +59804,10 @@ void main() {
       return;
     }
     const k = e.key.toLowerCase();
+    if (k === "u" && state.mesh) {
+      flipUp();
+      return;
+    }
     if (e.key === "Tab" && state.mesh) {
       e.preventDefault();
       setSetting("viewMode", state.settings.viewMode === "splat" ? "cloud" : "splat");
@@ -59775,6 +59924,12 @@ void main() {
     autoRotate,
     autoOrbit,
     origCoord,
+    flipUp,
+    estimateUpFromData,
+    checkPole,
+    setUpAxis(v) {
+      setUp(new Vector3(...v), "test");
+    },
     navAction,
     directPick,
     rebuildPoints,

@@ -71,10 +71,13 @@ function updateClipPlanes() {
   const near = THREE.MathUtils.clamp(d * 0.02, 1e-4, R * 0.01); // 가까이 가면 near 도 함께 줄어 표면이 잘리지 않음
   if (Math.abs(camera.near - near) / near > 0.15) { camera.near = near; camera.far = Math.max(R * 300, near * 1e6); camera.updateProjectionMatrix(); }
 }
+let lastPoleHint = -Infinity;
+function poleHint() { const now = performance.now(); if (now - lastPoleHint < 30000) return; lastPoleHint = now; showError('E16', `현재 위 방향: ${$('#up-label').textContent}`, { ttl: 20000, actions: '<div class="btnrow"><button class="btn small primary" data-act="flip">⇅ 위아래 뒤집기 (U)</button></div>', onAction: (a) => { if (a === 'flip') flipUp(); } }); }
+function checkPole() { if (!state.mesh || !state.dragging) return; const off = camera.position.clone().sub(controls.target); const L = off.length(); if (L < 1e-9) return; const phi = Math.acos(THREE.MathUtils.clamp(off.dot(camera.up) / L, -1, 1)); if (phi > Math.PI - 0.03) poleHint(); } // 카메라가 위 방향 기준 '바로 아래'에 닿음 = 뒤집힌 화면을 세우려다 멈춘 상황
 function loop() {
   requestAnimationFrame(loop);
   tickAnimations();
-  controls.update();
+  controls.update(); checkPole();
   if (state.bounds) updateClipPlanes();
   if (state.mesh || state.points3) renderer.render(scene, camera);
   drawOverlay();
@@ -112,9 +115,29 @@ function setUp(v, source) {
   // OrbitControls 는 생성 시점의 up 으로 회전축(_quat)을 고정하므로 up 변경 시 직접 갱신 (안 하면 회전이 옛 축으로 돎)
   if (controls._quat) { controls._quat.setFromUnitVectors(camera.up, new THREE.Vector3(0, 1, 0)); controls._quatInverse.copy(controls._quat).invert(); }
   const names = { '0,-1,0': '−Y', '0,1,0': '+Y', '0,0,1': '+Z', '0,0,-1': '−Z', '1,0,0': '+X', '-1,0,0': '−X' };
-  $('#up-label').textContent = names[[v.x, v.y, v.z].join(',')] || '사용자';
+  const u = camera.up; $('#up-label').textContent = names[[u.x, u.y, u.z].map((q) => (Math.abs(q) < 1e-9 ? 0 : q)).join(',')] || `(${u.x.toFixed(2)}, ${u.y.toFixed(2)}, ${u.z.toFixed(2)})`;
   if (state.bounds) frameAll();
 }
+function flipUp() { if (!state.mesh) return; setUp(camera.up.clone().negate(), `${(state.upSource || '기본값').replace(/ → 뒤집음$/, '')} → 뒤집음`); toast(`위 방향을 뒤집었습니다: <b>${$('#up-label').textContent}</b>`, 'info', 2500); }
+// 축에 가까우면(20° 이내) 좌표축으로 맞춤
+function snapAxis(v) { const a = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].map((q) => new THREE.Vector3(...q)); let best = a[0], bd = -2; for (const q of a) { const d = q.dot(v); if (d > bd) { bd = d; best = q; } } return bd > Math.cos(20 * DEG) ? best.clone() : v.clone().normalize(); }
+// 장면 데이터로 위 방향 추정: 가장 얇은 주축(지면 법선) + 그 축을 따라 중앙값에서 3 MAD 넘게 떨어진 점이 어느 쪽에 많은지(건물·잡티는 위로 솟음).
+// 야외·드론처럼 평평한 장면(얇은 축 / 둘째 축 < 0.1)에서 한쪽 쏠림이 뚜렷할 때(|A| > 0.5)만 '확실'로 본다. 실내는 부호가 반대로 나올 수 있어 쓰지 않음.
+function estimateUpFromData() {
+  const C = state.centers; if (!C || C.length < 300) return null; const n = C.length / 3;
+  const xs = [], ys = [], zs = []; for (let i = 0; i < n; i++) { xs.push(C[3 * i]); ys.push(C[3 * i + 1]); zs.push(C[3 * i + 2]); }
+  const med = (a) => Float64Array.from(a).sort()[Math.floor(a.length / 2)]; const c = [med(xs), med(ys), med(zs)];
+  const r = new Float64Array(n); for (let i = 0; i < n; i++) r[i] = Math.hypot(xs[i] - c[0], ys[i] - c[1], zs[i] - c[2]); const r90 = Float64Array.from(r).sort()[Math.floor(n * 0.9)];
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; let m = 0; for (let i = 0; i < n; i++) { if (r[i] > r90) continue; const d = [xs[i] - c[0], ys[i] - c[1], zs[i] - c[2]]; for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) M[a][b] += d[a] * d[b]; m++; }
+  const { vals, vecs } = jacobiSym(M); const order = [0, 1, 2].sort((a, b) => vals[a] - vals[b]); const nrm = new THREE.Vector3(...vecs[order[0]]).normalize(); const flat = vals[order[0]] / Math.max(1e-12, vals[order[1]]);
+  const h = new Float64Array(n); for (let i = 0; i < n; i++) h[i] = (xs[i] - c[0]) * nrm.x + (ys[i] - c[1]) * nrm.y + (zs[i] - c[2]) * nrm.z;
+  const hm = med(h); const mad = med(Array.from(h, (q) => Math.abs(q - hm))) * 1.4826; let up = 0, dn = 0; for (const q of h) { if (q > hm + 3 * mad) up++; else if (q < hm - 3 * mad) dn++; }
+  const A = (up - dn) / Math.max(1, up + dn); const axis = nrm.clone().multiplyScalar(A >= 0 ? 1 : -1);
+  return { axis, snapped: snapAxis(axis), flat, A, confident: flat < 0.1 && Math.abs(A) > 0.5 };
+}
+// 3DGS 학습 결과의 cameras.json → 위 방향 = 평균(영상 위쪽 −y축) − 평균(시선 +z축)  (드론·손촬영 모두 맞음)
+function upFromCameras(cams) { const v = new THREE.Vector3(); for (const c of cams) { const R = c.rotation; v.x += -R[0][1] - R[0][2]; v.y += -R[1][1] - R[1][2]; v.z += -R[2][1] - R[2][2]; } return v.lengthSq() > 1e-12 ? v.normalize() : null; }
+function axisName(v) { const s = snapAxis(v); const nm = { '1,0,0': '+X', '-1,0,0': '−X', '0,1,0': '+Y', '0,-1,0': '−Y', '0,0,1': '+Z', '0,0,-1': '−Z' }[[s.x, s.y, s.z].map(Math.round).join(',')]; return nm && s.dot(v) > 0.999 ? nm : `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`; }
 function autoStepDeg() { return state.settings.rotStep > 0 ? state.settings.rotStep : 350 / Math.max(2, state.settings.n); }
 // 회전축: 'screen' = 지금 보는 화면 기준(세로축=좌우 회전, 가로축=상하 회전), 'world' = 파일의 위(up) 방향 기준
 function orbitAxis(kind) {
@@ -221,7 +244,7 @@ function navOrbit(dhDeg, dvDeg) { // 궤도 중심(controls.target)을 기준으
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
     const cand = off.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(right, -dvDeg * DEG));
     const phi = Math.acos(THREE.MathUtils.clamp(cand.clone().normalize().dot(up), -1, 1)) / DEG;
-    if (phi > 4 && phi < 176) off.copy(cand);
+    if (phi > 4 && phi < 176) off.copy(cand); else poleHint();
   }
   camera.position.copy(pivot).add(off); camera.lookAt(pivot); controls.update();
 }
@@ -435,7 +458,7 @@ function showError(code, extra = '', opts = {}) {
   t.querySelector('.xbtn').onclick = () => t.remove();
   if (opts.onAction) t.addEventListener('click', (ev) => { const a = ev.target.closest('[data-act]'); if (a) { opts.onAction(a.dataset.act); t.remove(); } });
   $('#toasts').appendChild(t);
-  const ttl = e.level === 'block' ? 0 : e.level === 'warn' ? 14000 : 8000; if (ttl) setTimeout(() => t.remove(), ttl);
+  const ttl = opts.ttl ?? (e.level === 'block' ? 0 : e.level === 'warn' ? 14000 : 8000); if (ttl) setTimeout(() => t.remove(), ttl);
   updateCheckDot();
   return t;
 }
@@ -535,6 +558,7 @@ function updateDenseLabel() { const el = $('#q-dense-info'); if (!el) return; co
 function rebuildPoints() {
   if (state.points3) { scene.remove(state.points3); state.points3.geometry.dispose(); state.points3.material.dispose(); state.points3 = null; }
   const cl = state.cloud; if (!cl) return;
+  if (state.settings.viewMode === 'splat') { state.denseInfo = null; updateDenseLabel(); applyViewMode(); return; } // 스플랫 보기에서는 만들지 않음
   if (cl.rad && cl.bigRad == null) { const sorted = Float32Array.from(cl.rad).sort(); cl.bigRad = sorted[Math.floor(cl.n * 0.99)]; } // 반경 상위 1 % 기준값
   const colors = cloudColors(cl); const K = densifyFactor(cl); let src = cl, srcCol = colors, isDense = false;
   if (state.settings.ptMode === 'dense' && cl.scl && cl.quat) { const t0 = performance.now(); const d = buildDenseSamples(cl, K, colors); src = d; srcCol = d.col; isDense = true; state.denseInfo = { K, total: d.n, ms: Math.round(performance.now() - t0), mb: +(d.n * 15 / 1e6).toFixed(0) }; } else state.denseInfo = null;
@@ -545,6 +569,7 @@ function rebuildPoints() {
 }
 function applyViewMode() {
   const mode = state.settings.viewMode; const names = { splat: '스플랫', cloud: '점군', both: '겹침' };
+  if (mode !== 'splat' && !state.points3 && state.cloud && !state.buildingPoints) { state.buildingPoints = true; try { rebuildPoints(); } finally { state.buildingPoints = false; } return; }
   if (state.mesh) state.mesh.visible = mode !== 'cloud' || !state.points3;
   if (state.points3) state.points3.visible = mode !== 'splat';
   $('#view-label').textContent = names[mode] || mode; $('#cloud-quick').hidden = !(mode !== 'splat' && state.points3); $$('#menu-view button').forEach((b) => b.classList.toggle('on', b.dataset.view === mode));
@@ -633,7 +658,7 @@ function boundsFromPositions(arr) {
 async function loadFiles(fileList) {
   const files = Array.from(fileList || []); if (!files.length) return;
   const main = files.find((f) => /\.(ply|spz|splat|ksplat|sog|zip)$/i.test(f.name));
-  const side = files.find((f) => /\.json$/i.test(f.name));
+  const jsons = files.filter((f) => /\.json$/i.test(f.name));
   if (!main) { showError('E02', `놓은 파일: ${files.map((f) => f.name).join(', ')}`); return; }
   const ext = main.name.toLowerCase().split('.').pop();
   $('#loading').hidden = false; $('#loading-text').textContent = `파일을 읽는 중… (${main.name}, ${(main.size / 1e6).toFixed(1)} MB)`; $('#loading-sub').textContent = main.size > 500e6 ? '큰 파일입니다. 1~3분 정도 걸릴 수 있으니 탭을 닫지 마세요.' : '';
@@ -676,14 +701,21 @@ async function loadFiles(fileList) {
   state.bounds = pos ? boundsFromPositions(pos) : { center: new THREE.Vector3(), radius: 5 };
   state.centers = pos ? Float32Array.from(pos) : null; // 휠 줌의 표면 깊이 추정용 표본
   state.cloud = (header ? buildCloudFromPly(buf, header) : null) || buildCloudFromMesh(mesh); rebuildPoints(); if (state.cloud) state.centers = state.cloud.n > 200000 ? (() => { const step = Math.ceil(state.cloud.n / 200000); const out = new Float32Array(Math.ceil(state.cloud.n / step) * 3); let m = 0; for (let i = 0; i < state.cloud.n; i += step) { out[3 * m] = state.cloud.pos[3 * i]; out[3 * m + 1] = state.cloud.pos[3 * i + 1]; out[3 * m + 2] = state.cloud.pos[3 * i + 2]; m++; } return out.subarray(0, m * 3); })() : state.cloud.pos;
-  // 위 방향
-  const upFromHeader = header?.upAxis ? { '+z': [0, 0, 1], '-z': [0, 0, -1], '+y': [0, 1, 0], '-y': [0, -1, 0], '+x': [1, 0, 0], '-x': [-1, 0, 0] }[header.upAxis] : null;
-  if (upFromHeader) setUp(new THREE.Vector3(...upFromHeader), 'PLY 헤더(up axis)');
-  else if (state.coordOffset) { setUp(new THREE.Vector3(0, 0, 1), '큰 좌표(지오리퍼런싱) 파일 → +Z 추정'); showError('E06', '지역·국가 좌표계 파일은 보통 Z 가 높이이므로 +Z 로 가정했습니다.'); }
+  // 함께 놓은 JSON: 축척 사이드카 / 학습 카메라(cameras.json) 구분
+  let sidecar = null, cams = null;
+  for (const jf of jsons) { try { const j = JSON.parse(await jf.text()); if (Array.isArray(j) && j.length && j[0].rotation && j[0].position) cams = j; else if (j && typeof j === 'object' && !sidecar) sidecar = j; } catch (e) { showError('E12', `${jf.name}: JSON 구문 오류 ${String(e).slice(0, 80)}`); } }
+  // 위 방향: ① cameras.json ② 헤더·사이드카(데이터가 확실히 반대면 보정) ③ 데이터 추정(확실할 때) ④ 관례 기본값
+  const AX = { '+z': [0, 0, 1], '-z': [0, 0, -1], '+y': [0, 1, 0], '-y': [0, -1, 0], '+x': [1, 0, 0], '-x': [-1, 0, 0] };
+  const sideUp = sidecar && typeof sidecar.up_axis === 'string' ? AX[(/^[+-]/.test(sidecar.up_axis) ? '' : '+') + sidecar.up_axis.toLowerCase().replace('−', '-')] : null;
+  const declared = header?.upAxis ? { v: AX[header.upAxis], src: `PLY 헤더(up axis: ${header.upAxis})` } : sideUp ? { v: sideUp, src: `JSON(up_axis: ${sidecar.up_axis})` } : null;
+  const est = estimateUpFromData(); const camUp = cams ? upFromCameras(cams) : null; state.upEstimate = est ? { axis: est.axis.toArray(), flat: est.flat, A: est.A, confident: est.confident } : null;
+  if (camUp) { const v = snapAxis(camUp); setUp(v, `학습 카메라 ${cams.length}대(cameras.json)`); if (declared && new THREE.Vector3(...declared.v).dot(v) < -0.5) showError('E15', `${declared.src} ↔ 카메라 기준 ${axisName(v)} → ${axisName(v)} 적용`); }
+  else if (declared) { const dv = new THREE.Vector3(...declared.v); if (est && est.confident && dv.dot(est.axis) < -0.5) { setUp(est.snapped, `데이터 추정 (${declared.src} 와 반대여서 보정)`); showError('E15', `${declared.src} ↔ 장면 분석 ${axisName(est.snapped)} (평탄도 ${est.flat.toFixed(2)}, 쏠림 ${est.A.toFixed(2)}) → ${axisName(est.snapped)} 적용`); } else setUp(dv, declared.src); }
+  else if (est && est.confident) { setUp(est.snapped, `데이터 추정(지면 법선, 평탄도 ${est.flat.toFixed(2)})`); showError('E06', `파일에 위 방향 정보가 없어 장면 분석으로 ${axisName(est.snapped)} 를 위로 정했습니다.`); }
+  else if (state.coordOffset && est && est.flat < 0.2) { setUp(est.snapped, '큰 좌표 파일: 장면 분석(부호 불확실)'); showError('E06', `지역·국가 좌표계 파일이라 장면의 가장 얇은 축 ${axisName(est.snapped)} 를 위로 가정했습니다. 뒤집혀 보이면 U 키.`); }
   else { setUp(new THREE.Vector3(...(ext === 'spz' ? [0, 1, 0] : [0, -1, 0])), null); showError('E06', `현재 가정: ${ext === 'spz' ? '+Y (SPZ 관례)' : '−Y (COLMAP 3DGS 관례)'}`); }
   frameAll();
   // 단위
-  let sidecar = null; if (side) { try { sidecar = JSON.parse(await side.text()); } catch (e) { showError('E12', `JSON 구문 오류: ${String(e).slice(0, 80)}`); } }
   resolveUnits(header, sidecar);
   // UI
   $('#loading').hidden = true; $('#dropzone').classList.add('hidden');
@@ -948,7 +980,7 @@ function openChecklist() {
   it(state.webgl2 ? 'ok' : 'bad', 'WebGL2', state.webgl2 ? '사용 가능' : ERRORS.E01.why, state.webgl2 ? '' : ERRORS.E01.fix);
   if (!state.file) it('na', '파일', '아직 열지 않음', '파일을 끌어다 놓거나 [파일 열기]');
   else { const f = state.file, h = state.header; it('ok', '파일', `${f.name} · ${(f.size / 1e6).toFixed(1)} MB · ${f.ext.toUpperCase()}${f.count ? ` · 가우시안 ${f.count.toLocaleString()}개` : ''}${h ? ` · SH ${h.shDegree}차${h.compressed ? ' · 압축 PLY' : ''}` : ''}`); if (h) it('ok', '3DGS 속성', h.compressed ? 'SuperSplat 압축 PLY (렌더러가 해석)' : `opacity · scale_0~2 · rot_0~3 확인`); else it('ok', '3DGS 속성', `${f.ext.toUpperCase()} 형식 — 렌더러(Spark)가 해석함`); }
-  if (state.file) { if (state.unit.known) it('ok', '축척 (1 u → m)', `${state.unit.source} · 1 u = ${state.unit.factor.toPrecision(6)} m${state.unit.sigmaRel ? ` · 축척 상대 불확도 ≈ ${(state.unit.sigmaRel * 100).toFixed(1)} %` : ''}`); else it('warn', '축척 (1 u → m)', ERRORS.E05.why, ERRORS.E05.fix); if (state.coordOffset) it('ok', '좌표 원점 이동', `파일 좌표가 커서 뷰어 내부에서 (${state.coordOffset.join(', ')}) 를 뺐습니다. 표시·내보내기 좌표는 원래 값입니다.`); it(state.upSource ? 'ok' : 'warn', '위(上) 방향', state.upSource ? `${state.upSource}: ${$('#up-label').textContent}` : `정보 없음 → ${$('#up-label').textContent} 가정 (측정 정확도 무관)`, state.upSource ? '' : ERRORS.E06.fix); }
+  if (state.file) { if (state.unit.known) it('ok', '축척 (1 u → m)', `${state.unit.source} · 1 u = ${state.unit.factor.toPrecision(6)} m${state.unit.sigmaRel ? ` · 축척 상대 불확도 ≈ ${(state.unit.sigmaRel * 100).toFixed(1)} %` : ''}`); else it('warn', '축척 (1 u → m)', ERRORS.E05.why, ERRORS.E05.fix); if (state.coordOffset) it('ok', '좌표 원점 이동', `파일 좌표가 커서 뷰어 내부에서 (${state.coordOffset.join(', ')}) 를 뺐습니다. 표시·내보내기 좌표는 원래 값입니다.`); if (state.upEstimate) it(state.upEstimate.confident ? 'ok' : 'na', '위 방향 장면 분석', `추정 ${axisName(new THREE.Vector3(...state.upEstimate.axis))} · 평탄도 ${state.upEstimate.flat.toFixed(2)} (0.1 미만 = 평평) · 위쪽 쏠림 ${state.upEstimate.A.toFixed(2)} (|0.5| 초과 = 뚜렷) → ${state.upEstimate.confident ? '확실' : '불확실(사용 안 함)'}`); it(state.upSource ? 'ok' : 'warn', '위(上) 방향', state.upSource ? `${state.upSource}: ${$('#up-label').textContent}` : `정보 없음 → ${$('#up-label').textContent} 가정 (측정 정확도 무관)`, state.upSource ? '' : ERRORS.E06.fix); }
   if (state.task) { const n = state.rays.length, e = state.estimate; if (n < 2) it('bad', '진행 중 측정: 광선 수', `${n}개 — ${ERRORS.E07.why}`, ERRORS.E07.fix); else { it(e.maxAngleDeg >= 20 ? 'ok' : e.maxAngleDeg >= 10 ? 'warn' : 'bad', '진행 중 측정: 광선 각도', `최대 ${e.maxAngleDeg.toFixed(1)}° (20° 이상 권장)`, e.maxAngleDeg < 20 ? ERRORS.E08.fix : ''); it(e.pxRms <= 1.5 ? 'ok' : e.pxRms <= 4 ? 'warn' : 'bad', '진행 중 측정: 광선 잔차', `RMS ${e.pxRms.toFixed(1)} px · σ₀ ${fmtLen(e.sigma0)}`, e.pxRms > 4 ? ERRORS.E09.fix : ''); } }
   if (state.cloud) it('ok', '점군', `가우시안 중심 ${state.cloud.n.toLocaleString()}점 · 보기 ${state.settings.viewMode} · 1클릭 방식 ${state.settings.pickMode === 'nearest' ? '가장 가까운 점' : '군집 중앙값'} · 원뿔 ${state.settings.pickRadius} px`); it(state.points.length ? 'ok' : 'na', '결과', `점 ${state.points.length}개 · 거리 ${state.dists.length}개${state.points.length && !state.unit.known ? ' · ⚠ 모두 모델 단위' : ''}`);
   openModal(`<h2>정보 점검</h2><p class="muted small">측정에 필요한 정보가 갖춰졌는지 확인합니다. 빨강은 진행 불가, 노랑은 결과에 제한이 있음을 뜻합니다.</p><ul class="checklist">${items.map((x) => `<li><span class="st ${x.st}">${{ ok: '✓', warn: '!', bad: '✕', na: '–' }[x.st]}</span><span class="body"><b>${x.title}</b>${x.body}${x.fix ? `<div class="fix">👉 ${x.fix}</div>` : ''}</span></li>`).join('')}</ul>`);
@@ -1101,7 +1133,7 @@ $('#btn-dist').onclick = () => (state.task?.kind === 'distance' ? endTask() : st
 $('#btn-home').onclick = frameAll;
 $('#btn-up').onclick = (e) => { e.stopPropagation(); $('#btn-up').parentElement.classList.toggle('open'); };
 document.addEventListener('click', () => $('#btn-up').parentElement.classList.remove('open'));
-$$('#menu-up button').forEach((b) => (b.onclick = () => setUp(new THREE.Vector3(...b.dataset.up.split(',').map(Number)), '사용자 선택')));
+$$('#menu-up button[data-up]').forEach((b) => (b.onclick = () => setUp(new THREE.Vector3(...b.dataset.up.split(',').map(Number)), '사용자 선택'))); $('#up-flip').onclick = flipUp; $('#nav-flip').onclick = flipUp;
 $('#btn-autorot').onclick = () => autoRotate();
 $('#live-autorot').onclick = () => setSetting('autoRotate', !state.settings.autoRotate);
 $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => (b.onclick = () => setSetting('loupeSize', b.dataset.ls)));
@@ -1148,12 +1180,13 @@ const dz = $('#dropzone');
 document.addEventListener('drop', (e) => { if (e.dataTransfer?.files?.length) loadFiles(e.dataTransfer.files); });
 // 포인터 (클릭 vs 드래그 구분)
 let down = null;
-document.addEventListener('pointerdown', (e) => { if (e.target !== renderer?.domElement || e.button !== 0) return; down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+document.addEventListener('pointerdown', (e) => { if (e.target !== renderer?.domElement || e.button !== 0) return; down = { x: e.clientX, y: e.clientY, t: performance.now() }; state.dragging = true; });
+document.addEventListener('pointerup', () => { state.dragging = false; }, true);
 // 클릭 vs 드래그는 이동 거리로만 판정 (느린 렌더링 중 길게 눌러도 클릭으로 인정)
 document.addEventListener('pointerup', (e) => { if (!down || e.button !== 0) return; const mv = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (mv < 5 && state.task && e.target === renderer.domElement) { const r = renderer.domElement.getBoundingClientRect(); state.forceRay = e.shiftKey; onMeasureClick(e.clientX - r.left, e.clientY - r.top); state.forceRay = false; } });
 document.addEventListener('pointermove', (e) => { if (!renderer) return; const r = renderer.domElement.getBoundingClientRect(); state.mouse.x = e.clientX - r.left; state.mouse.y = e.clientY - r.top; state.mouse.inside = e.target === renderer.domElement; });
 // 키
-document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (e.key === 'Tab' && state.mesh) { e.preventDefault(); setSetting('viewMode', state.settings.viewMode === 'splat' ? 'cloud' : 'splat'); applyViewMode(); toast(`보기: <b>${state.settings.viewMode === 'cloud' ? '점군 — 클릭 한 번으로 점 선택(직접선택)' : '스플랫 — 다시점 클릭 측정'}</b>`, 'info', 2500); return; } if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (k === 'a' && !e.ctrlKey && !e.metaKey) $$('#menu-analyze button')[0].click(); else if (k === 'l') $$('#menu-analyze button')[1].click(); else if (k === 'p') $$('#menu-analyze button')[2].click(); else if (e.key === 'Enter') { if (state.task && GEOM_NEED[state.task.kind] && state.rays.length === 0) finishGeometry(); else finishPoint(); } else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if ((e.key === '-' || e.key === '=' || e.key === '+') && state.points3 && state.settings.viewMode !== 'splat') { const d = e.key === '-' ? -1 : 1; if (state.settings.ptMode === 'gauss') { setSetting('ptMaxPx', Math.max(1, Math.min(24, state.settings.ptMaxPx + d))); toast(`점군 최대 점 크기 ${state.settings.ptMaxPx} px`, 'info', 1200); } else { setSetting('ptSize', Math.max(0.5, Math.min(6, +(state.settings.ptSize + 0.5 * d).toFixed(1)))); toast(`점군 점 크기 ${state.settings.ptSize} px`, 'info', 1200); } } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(5, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
+document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'u' && state.mesh) { flipUp(); return; } if (e.key === 'Tab' && state.mesh) { e.preventDefault(); setSetting('viewMode', state.settings.viewMode === 'splat' ? 'cloud' : 'splat'); applyViewMode(); toast(`보기: <b>${state.settings.viewMode === 'cloud' ? '점군 — 클릭 한 번으로 점 선택(직접선택)' : '스플랫 — 다시점 클릭 측정'}</b>`, 'info', 2500); return; } if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (k === 'a' && !e.ctrlKey && !e.metaKey) $$('#menu-analyze button')[0].click(); else if (k === 'l') $$('#menu-analyze button')[1].click(); else if (k === 'p') $$('#menu-analyze button')[2].click(); else if (e.key === 'Enter') { if (state.task && GEOM_NEED[state.task.kind] && state.rays.length === 0) finishGeometry(); else finishPoint(); } else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if ((e.key === '-' || e.key === '=' || e.key === '+') && state.points3 && state.settings.viewMode !== 'splat') { const d = e.key === '-' ? -1 : 1; if (state.settings.ptMode === 'gauss') { setSetting('ptMaxPx', Math.max(1, Math.min(24, state.settings.ptMaxPx + d))); toast(`점군 최대 점 크기 ${state.settings.ptMaxPx} px`, 'info', 1200); } else { setSetting('ptSize', Math.max(0.5, Math.min(6, +(state.settings.ptSize + 0.5 * d).toFixed(1)))); toast(`점군 점 크기 ${state.settings.ptSize} px`, 'info', 1200); } } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(5, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
 function resetAll(keepFile) { state.points = []; state.dists = []; state.geoms = []; state.selected.clear(); state.nextId = 1; state.task = null; cancelPoint(false); $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active')); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; renderResults(); }
 function runTour() { document.getElementById('app').classList.add('tour-active'); startTour(TOUR_STEPS, { onDone: () => { document.getElementById('app').classList.remove('tour-active'); try { localStorage.setItem('gsm.tourSeen', '1'); } catch (_) {} } }); }
 
@@ -1172,7 +1205,7 @@ window.__app = {
   setCamera(pos, target, up) { if (up) camera.up.set(...up); camera.position.set(...pos); controls.target.set(...target); controls.update(); renderer.render(scene, camera); },
   project(p) { return project(new THREE.Vector3(...p)); },
   click(px, py) { onMeasureClick(px, py); },
-  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, navAction, directPick, rebuildPoints, addPickedPoint, applyViewMode, startRefine, geomInfo, addGeom, distanceDecomp, finishGeometry, taskPointAdded, propagate, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
+  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, flipUp, estimateUpFromData, checkPole, setUpAxis(v) { setUp(new THREE.Vector3(...v), 'test'); }, navAction, directPick, rebuildPoints, addPickedPoint, applyViewMode, startRefine, geomInfo, addGeom, distanceDecomp, finishGeometry, taskPointAdded, propagate, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
   debugAddPoint(xyz, name) { const p = { id: state.nextId++, name: name || `P${state.nextId - 1}`, p: new THREE.Vector3(...xyz), sigma0: 1e-4, cov: new THREE.Matrix3().identity().multiplyScalar(1e-8), n: 5, quality: 'good', pxRms: 0.1, maxAngleDeg: 60, rays: [] }; state.points.push(p); renderResults(); return p; },
   openGcpCalib, setGcp(name, xyz) { state.gcpInputs[name] = { x: xyz[0], y: xyz[1], z: xyz[2] }; }, openChecklist, openCalibWizard, applyManualScale(s) { state.unit = { known: true, factor: s, sigmaRel: 0, source: 'test' }; applyUnitUI(); },
   distanceInfo, intersectRays, render() { renderer.render(scene, camera); drawOverlay(); },

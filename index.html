@@ -29,7 +29,7 @@
 
   <!-- 플로팅 조작 패널 (마우스 없이 회전·확대·이동) -->
   <div id="navpad" hidden>
-    <div class="nav-head"><span>🎮 조작</span><span class="nav-hbtn"><button id="nav-fold" title="접기/펼치기">▾</button><button id="nav-close" title="숨기기 (도구막대의 🎮 로 다시 표시)">✕</button></span></div>
+    <div class="nav-head"><span>🎮 조작</span><span class="nav-hbtn"><button id="nav-flip" title="위아래 뒤집기 — 화면이 뒤집혀 보일 때 (U)">⇅</button><button id="nav-fold" title="접기/펼치기">▾</button><button id="nav-close" title="숨기기 (도구막대의 🎮 로 다시 표시)">✕</button></span></div>
     <div class="nav-body">
       <div class="nav-group"><div class="nav-title">회전 <span class="muted">(궤도 중심 기준)</span></div>
         <div class="nav-grid3">
@@ -76,6 +76,7 @@
       <div class="dropdown">
         <button id="btn-up" class="btn" disabled title="어느 축이 하늘 방향인지 (화면이 뒤집혀 보이면 바꾸세요)">⤒ 위 방향: <span id="up-label">−Y</span></button>
         <div class="menu" id="menu-up">
+          <button id="up-flip"><b>⇅ 위아래 뒤집기</b> (화면이 뒤집혀 보일 때) <kbd>U</kbd></button>
           <button data-up="0,-1,0">−Y (COLMAP 3DGS 기본)</button>
           <button data-up="0,1,0">+Y (SPZ · 일반 3D)</button>
           <button data-up="0,0,1">+Z (측량·ENU·gs_ply_georef 결과)</button>
@@ -215,7 +216,7 @@
       <label class="field check"><input id="set-navpad" type="checkbox" checked> 플로팅 조작 패널 표시 <span class="muted small">(마우스 없이 버튼으로 회전·확대·이동)</span></label>
       <label class="field">조작 패널 회전 단계 <span><input id="set-navstep" type="number" min="1" max="90" step="1" value="15"> ° <span class="muted small">(한 번 클릭당)</span></span></label>
       <div class="btnrow"><button id="btn-scale-manual" class="btn small">축척 직접 입력</button><button id="btn-tour" class="btn small ghost">기능 소개 투어 다시 보기</button></div>
-      <p class="muted small">마우스: 왼쪽 드래그 회전 · 휠 확대(커서 방향) · 오른쪽 드래그 이동. 키: Tab 스플랫/점군 전환, M 점, D 거리, A 각도, L 길이, P 면적, R 다음 각도, ← → ↑ ↓ 그 방향으로 회전, Enter 확정, Esc 취소, Backspace 마지막 취소, F 추정점에 초점, H 홈.</p>
+      <p class="muted small">마우스: 왼쪽 드래그 회전 · 휠 확대(커서 방향) · 오른쪽 드래그 이동. 키: Tab 스플랫/점군 전환, U 위아래 뒤집기, M 점, D 거리, A 각도, L 길이, P 면적, R 다음 각도, ← → ↑ ↓ 그 방향으로 회전, Enter 확정, Esc 취소, Backspace 마지막 취소, F 추정점에 초점, H 홈.</p>
     </section>
   </aside>
 
