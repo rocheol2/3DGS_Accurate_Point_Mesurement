@@ -27,7 +27,7 @@ table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}th,td{tex
 <p class="lead">3D Gaussian Splatting(3DGS) 파일을 브라우저에서 열고, <b>같은 점을 여러 각도에서 클릭</b>해 3D 좌표와 두 점 사이 거리를 재는 도구입니다. 설치·변환·계정이 필요 없고 파일은 컴퓨터 밖으로 나가지 않습니다. 방법은 Deng &amp; Qin (2026) <i>Accurate Point Measurement in 3DGS</i> 의 다시점 공간교회(spatial intersection)입니다.</p>
 <p><a class="btn" href="index.html">← 측정기로 돌아가기</a> &nbsp; <a href="index.html#tour" onclick="localStorage.removeItem('gsm.tourSeen')">기능 소개 투어 다시 보기</a></p>
 <div class="toc">
-<a href="#idea">1. 어떻게 재는 건가요?</a><a href="#formats">2. 열 수 있는 파일</a><a href="#steps">3. 따라하기 (점 → 거리)</a><a href="#guide">4. 안내선·확대창·자동 보정</a><a href="#scale">5. 축척(미터) — 없으면 없다고 알려 드립니다</a><a href="#quality">6. 결과 읽는 법 (σ, 품질)</a><a href="#export">7. 내보내기</a><a href="#controls">8. 마우스·키보드</a><a href="#errors">9. 오류·경고 메시지 전체 목록</a><a href="#faq">10. 자주 묻는 질문</a><a href="#host">11. 내 컴퓨터/서버에서 열기</a>
+<a href="#idea">1. 어떻게 재는 건가요?</a><a href="#formats">2. 열 수 있는 파일</a><a href="#steps">3. 따라하기 (점 → 거리)</a><a href="#guide">4. 안내선·확대창·자동 보정</a><a href="#eraser">4-1. 🧽 지우개 · 지운 결과 저장</a><a href="#scale">5. 축척(미터) — 없으면 없다고 알려 드립니다</a><a href="#quality">6. 결과 읽는 법 (σ, 품질)</a><a href="#export">7. 내보내기</a><a href="#controls">8. 마우스·키보드</a><a href="#errors">9. 오류·경고 메시지 전체 목록</a><a href="#faq">10. 자주 묻는 질문</a><a href="#host">11. 내 컴퓨터/서버에서 열기</a>
 </div>
 
 <h2 id="idea">1. 어떻게 재는 건가요?</h2>
@@ -68,6 +68,34 @@ table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}th,td{tex
 <tr><td>자동 회전</td><td>클릭마다(또는 <kbd>R</kbd>) 측정 중인 점을 중심으로 350°÷광선 수 만큼 방위각 회전, 점은 화면 중앙 고정</td><td>사용자는 같은 점을 다시 클릭만 하면 되고, 광선 각도가 자동으로 고르게 벌어집니다. 측정 패널에서 켬/끔.</td></tr>
 <tr><td>각도 막대</td><td>첫 광선과 현재 시선 사이 각도</td><td>20° 미만이면 광선이 거의 평행해 깊이 오차가 커집니다.</td></tr></table>
 
+<h2 id="eraser">4-1. 🧽 지우개 — 잡티를 지우고 저장하기</h2>
+<p>3DGS 에는 공중에 뜬 얼룩(floater)이나 필요 없는 부분이 섞여 있습니다. <b>[🧽 지우개]</b>(키 <kbd>E</kbd>)를 켜고 <b>왼쪽 버튼을 누른 채 문지르면</b> 붓 아래가 지워지고, <b>[💾 지운 결과 저장]</b>으로 새 파일을 만들 수 있습니다. <b>원본 파일은 바뀌지 않습니다.</b></p>
+<ol><li><b>[🧽 지우개]</b> 또는 <kbd>E</kbd> → 커서에 분홍색 원(붓)이 따라다닙니다.</li>
+<li>지울 곳을 휠로 확대하고 <b>왼쪽 드래그</b>로 문지릅니다. (지우개가 켜진 동안 회전은 <b>오른쪽 드래그</b>, 이동은 조작 패널 ← → ↑ ↓)</li>
+<li>붓 크기는 <kbd>[</kbd> <kbd>]</kbd>. 잘못 지웠으면 <b>[↶ 되돌리기]</b>(<kbd>Ctrl</kbd>+<kbd>Z</kbd>), 되돌린 것을 다시 지우려면 <b>[↷ 다시 실행]</b>(<kbd>Ctrl</kbd>+<kbd>Y</kbd> 또는 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>), 전부 되살리려면 [전체 복원](이것도 되돌리기로 취소 가능).</li>
+<li><b>[💾 지운 결과 저장]</b>(<kbd>Ctrl</kbd>+<kbd>S</kbd>) → 이름 확인 → [저장] → <code>원래이름_cleaned.ply</code></li></ol>
+<h3>어디까지(깊이) 지울까 — 네 가지 방식</h3>
+<table><tr><th>방식</th><th>키</th><th>무엇이 지워지나</th><th>이럴 때</th></tr>
+<tr><td><b>보이는 층만</b> (기본 · 1층)</td><td><kbd>1</kbd></td><td>지금 화면에 보이는 겉층 한 겹</td><td>표면 위에 얹힌 잡티, 겉에서부터 조심스럽게</td></tr>
+<tr><td><b>여러 층</b> (2~10층 선택)</td><td><kbd>2</kbd>~<kbd>9</kbd></td><td>겉에서부터 내가 정한 수만큼의 겹과 그 사이의 것</td><td>잡티가 겹겹이 끼어 있거나 두꺼울 때 한 번에</td></tr>
+<tr><td><b>큰 가우시안만</b></td><td><kbd>B</kbd></td><td>깊이에 상관없이, 기준(전체 크기 중앙값의 1.5~10배, 기본 3배)보다 큰 것만</td><td>공중에 뜬 큰 얼룩·하늘 잡티 — 뒤의 실제 표면(작은 가우시안)은 남습니다</td></tr>
+<tr><td><b>전부 (관통)</b></td><td><kbd>0</kbd></td><td>깊이에 상관없이 붓 아래 전부</td><td>뒤가 비어 있는 각도에서 통째로</td></tr></table>
+<p>패널의 <b>단면 그림</b>이 지금 고른 방식에서 어떤 겹(①~⑤)과 큰 잡티(●)가 지워지는지 분홍 점선으로 보여 주고, 붓 옆에도 <code>1층</code>·<code>3층</code>·<code>큰 것만</code>·<code>전부</code>처럼 현재 방식이 적혀 있습니다.</p>
+<div class="note"><b>한 번 문지르면(누른 채) 정한 층 수만큼만 지워집니다.</b> 같은 자리를 왔다 갔다 문질러도 더 깊이 파이지 않습니다. 더 깊이 지우려면 마우스를 <b>뗐다가 다시</b> 문지르세요. '한 겹'은 붓 아래를 잘게 나눈 칸마다 앞에서부터 불투명도를 더해 화면이 완전히 가려지는 데까지(+ 그 깊이의 약 4 % 두께)입니다. 반투명한 잡티는 뒤의 표면과 한 겹으로 묶일 수 있으니 그럴 때는 <b>큰 가우시안만</b>이 더 안전합니다.</div>
+<h3>되돌리기 · 다시 실행</h3>
+<ul><li><b>한 단계 = 붓질 한 번</b>(누르고 뗄 때까지). 버튼에 남은 단계 수가 <code>↶ 되돌리기 (3)</code>, <code>↷ 다시 실행 (1)</code>처럼 표시됩니다.</li>
+<li><b>📜 작업 기록</b> 목록의 줄을 누르면 그 단계로 한 번에 돌아갑니다. 맨 위 <code>처음 상태 (지우기 전)</code>를 누르면 모두 되살아납니다. 지금 단계는 <code>◀ 지금</code>, 되돌린 단계는 흐린 <code>↷</code> 줄(다시 실행 가능)입니다. 되돌린 뒤 새로 지우면 흐린 줄은 정리됩니다.</li>
+<li>되돌리거나 다시 실행한 자리는 <b>파란 점선 상자</b>로 잠깐 표시되고, 알림이 몇 개를 되살렸는지(다시 지웠는지) 알려 줍니다.</li>
+<li>지우개를 끈 뒤에도 측정 탭의 <code>🧽 지우개 기록</code> 줄 버튼이나 <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd>로 되돌릴 수 있습니다(점·거리 측정 중에는 제외). 문지르는 도중 <kbd>Ctrl</kbd>+<kbd>Z</kbd>는 그 붓질을 취소합니다.</li>
+<li>기록은 파일을 열어 둔 동안만 유지됩니다. 원본 파일은 바뀌지 않으므로 다시 열면 처음부터 할 수 있습니다.</li></ul>
+<h3>저장</h3>
+<ul><li>일반 3DGS PLY: 원본에서 <b>지운 가우시안의 행만 빼고 나머지는 한 바이트도 바꾸지 않습니다</b>(좌표·색·시점에 따라 변하는 색(SH)·헤더 주석 그대로, 큰 좌표 파일도 원래 좌표 그대로). 헤더에 <code>comment cleaned with 3DGS measurer eraser: removed M of N gaussians</code> 한 줄이 추가됩니다.</li>
+<li>Chrome 은 저장 위치를 고르는 창이 뜨고 파일로 바로 씁니다(GB 급도 조각 단위). 그 외 브라우저는 다운로드 폴더에 저장됩니다.</li>
+<li><code>.spz</code>·<code>.splat</code>·<code>.ksplat</code>·<code>.sog</code>·압축 PLY 는 <b>3DGS PLY(SH 0차)</b>로 바꿔 저장합니다(시점에 따라 변하는 색 성분은 빠짐).</li>
+<li>이 뷰어에서 축척·좌표 보정을 했다면 저장 창의 "축척·좌표 정보(JSON)도 함께 저장"을 켜 두세요. 새 PLY 와 JSON 을 함께 놓으면 그대로 적용됩니다.</li>
+<li>지운 것은 저장 전까지 화면에서만 숨겨진 상태입니다. 저장하지 않고 창을 닫으면 경고가 뜨고, 저장 실패는 E17 이 이유와 해결 방법을 알려 줍니다.</li>
+<li>지운 가우시안은 점군 보기·1클릭 직접 선택·휠 확대의 표면 인식에서도 빠집니다. 이미 측정한 점·거리는 그대로 남습니다.</li></ul>
+
 <h2 id="scale">5. 축척(미터) — 없으면 없다고 알려 드립니다</h2>
 <p>COLMAP으로 만든 3DGS는 크기 정보가 없습니다(축척 표시 없는 지도와 같음). 앱은 파일을 열 때 축척 정보를 찾고, <b>없으면 상단에 주황 배너(E05)</b>로 "미터 거리를 표시할 수 없다"는 사실과 이유, 해결 방법 세 가지를 보여 줍니다. 이때 거리는 <b>모델 단위(u)</b>로 표시되고 ⚠ 표시가 붙습니다. 앱이 없는 정보를 지어내는 일은 없습니다.</p>
 <h3>축척을 알려 주는 세 가지 방법</h3>
@@ -90,7 +118,7 @@ table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}th,td{tex
 
 <h2 id="controls">8. 마우스·키보드·조작 패널</h2>
 <p>마우스 없이도 <b>🎮 조작 패널</b>(회전·확대·이동·홈·초점 버튼, 누르고 있으면 연속)로 같은 동작을 할 수 있습니다.</p>
-<table><tr><th>동작</th><th>입력</th></tr><tr><td>회전</td><td>왼쪽 드래그</td></tr><tr><td>확대/축소 — 커서 아래 <b>표면을 향해</b> 접근/후퇴 (남은 거리의 12 %씩, 표면 통과 없음)</td><td>휠</td></tr><tr><td>이동</td><td>오른쪽 드래그</td></tr><tr><td>광선 추가</td><td>측정 중 클릭 (드래그하면 클릭으로 치지 않음)</td></tr><tr><td>스플랫 ↔ 점군 보기 전환</td><td><kbd>Tab</kbd></td></tr><tr><td>위아래 뒤집기 (화면이 뒤집혀 보일 때)</td><td><kbd>U</kbd></td></tr><tr><td>점 측정 / 거리 측정</td><td><kbd>M</kbd> / <kbd>D</kbd></td></tr><tr><td>각도 / 길이 / 면적 분석 (완성: Enter, 기존 점은 마커 클릭)</td><td><kbd>A</kbd> / <kbd>L</kbd> / <kbd>P</kbd></td></tr><tr><td>다음 각도로 회전 (설정한 방향·각도)</td><td><kbd>R</kbd></td></tr><tr><td>그 방향으로 한 단계 회전 (측정 중)</td><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td></tr><tr><td>점 확정 / 취소</td><td><kbd>Enter</kbd> / <kbd>Esc</kbd></td></tr><tr><td>마지막 광선 취소</td><td><kbd>Backspace</kbd></td></tr><tr><td>추정점에 초점 / 홈</td><td><kbd>F</kbd> / <kbd>H</kbd></td></tr><tr><td>확대창 배율</td><td><kbd>[</kbd> <kbd>]</kbd></td></tr><tr><td>도움말</td><td><kbd>?</kbd></td></tr></table>
+<table><tr><th>동작</th><th>입력</th></tr><tr><td>회전</td><td>왼쪽 드래그</td></tr><tr><td>확대/축소 — 커서 아래 <b>표면을 향해</b> 접근/후퇴 (남은 거리의 12 %씩, 표면 통과 없음)</td><td>휠</td></tr><tr><td>이동</td><td>오른쪽 드래그</td></tr><tr><td>광선 추가</td><td>측정 중 클릭 (드래그하면 클릭으로 치지 않음)</td></tr><tr><td>스플랫 ↔ 점군 보기 전환</td><td><kbd>Tab</kbd></td></tr><tr><td>위아래 뒤집기 (화면이 뒤집혀 보일 때)</td><td><kbd>U</kbd></td></tr><tr><td>점 측정 / 거리 측정</td><td><kbd>M</kbd> / <kbd>D</kbd></td></tr><tr><td>각도 / 길이 / 면적 분석 (완성: Enter, 기존 점은 마커 클릭)</td><td><kbd>A</kbd> / <kbd>L</kbd> / <kbd>P</kbd></td></tr><tr><td>다음 각도로 회전 (설정한 방향·각도)</td><td><kbd>R</kbd></td></tr><tr><td>그 방향으로 한 단계 회전 (측정 중)</td><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td></tr><tr><td>점 확정 / 취소</td><td><kbd>Enter</kbd> / <kbd>Esc</kbd></td></tr><tr><td>마지막 광선 취소</td><td><kbd>Backspace</kbd></td></tr><tr><td>추정점에 초점 / 홈</td><td><kbd>F</kbd> / <kbd>H</kbd></td></tr><tr><td>확대창 배율</td><td><kbd>[</kbd> <kbd>]</kbd></td></tr><tr><td>지우개 켜기/끄기</td><td><kbd>E</kbd> (끄기: <kbd>E</kbd> / <kbd>Esc</kbd>)</td></tr><tr><td>지우개: 지우기 / 회전 / 붓 크기</td><td>왼쪽 드래그 / 오른쪽 드래그 / <kbd>[</kbd> <kbd>]</kbd></td></tr><tr><td>지우개 깊이: 보이는 층만 / 여러 층(층 수) / 전부 / 큰 것만</td><td><kbd>1</kbd> / <kbd>2</kbd>~<kbd>9</kbd> / <kbd>0</kbd> / <kbd>B</kbd></td></tr><tr><td>지우개: 되돌리기 / 다시 실행 / 저장 (되돌리기·다시 실행은 지우개를 꺼도 동작)</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>) / <kbd>Ctrl</kbd>+<kbd>S</kbd></td></tr><tr><td>도움말</td><td><kbd>?</kbd></td></tr></table>
 
 <h2 id="errors">9. 오류·경고 메시지 전체 목록</h2>
 <p class="lead">앱이 보여 주는 메시지는 모두 아래 표에서 나옵니다. <span class="tag block">진행 불가</span>는 계속할 수 없음, <span class="tag warn">주의</span>는 계속할 수 있지만 결과에 제한이 있음, <span class="tag info">안내</span>는 참고 사항입니다.</p>
@@ -111,9 +139,13 @@ table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}th,td{tex
 <tr><td><code>E14</code></td><td><span class="tag info">안내</span></td><td><b>좌표 값이 매우 커서 뷰어 내부 원점을 옮겼습니다 (표시 좌표는 원래 값)</b><br><span style="color:#94a3b8">지역·국가 좌표계(예: X≈285,000 m)로 만든 파일은 GPU 가 쓰는 float32 로는 그 크기에서 약 3 cm 간격밖에 표현하지 못해 렌더링이 깨지거나 열리지 않습니다. 그래서 뷰어가 파일을 읽으면서 모든 좌표에서 일정한 값(오프셋)을 빼 원점 근처로 옮긴 뒤 렌더링합니다.</span></td><td>별도 조치가 필요 없습니다. 화면에 표시되는 좌표, 내보내기(CSV/JSON), 기준점(GCP) 보정 입력은 모두 오프셋을 다시 더한 원래 좌표를 사용합니다. 오프셋 값은 [정보 점검]에서 볼 수 있습니다.</td></tr>
 <tr><td><code>E15</code></td><td><span class="tag warn">주의</span></td><td><b>파일에 적힌 위 방향이 실제와 반대여서 자동으로 바로잡았습니다</b><br><span style="color:#94a3b8">PLY 헤더(또는 함께 놓은 JSON)에 적힌 위 방향과, 장면 자체(지면 법선과 높이 분포) 또는 학습 카메라 위치로 판단한 위 방향이 반대입니다. 그대로 쓰면 화면이 뒤집혀 보이고, 위·아래로 돌릴 때 회전이 한계에서 멈춥니다.</span></td><td>판단된 방향을 적용했습니다. 그래도 뒤집혀 보이면 [⤒ 위 방향] 메뉴의 [⇅ 위아래 뒤집기] 또는 U 키를 누르세요. 학습 폴더의 cameras.json 을 PLY 와 함께 끌어다 놓으면 카메라 기준으로 가장 정확하게 정해집니다.</td></tr>
 <tr><td><code>E16</code></td><td><span class="tag info">안내</span></td><td><b>위·아래로 더 돌아가지 않습니다 (회전 한계)</b><br><span style="color:#94a3b8">화면 회전은 "위 방향" 축을 기준으로 하며, 바로 위(천정)나 바로 아래를 넘어갈 수 없습니다. 위 방향이 실제와 반대로 잡혀 있으면 뒤집힌 화면을 드래그로 바로 세울 수 없어 회전이 멈춘 것처럼 보입니다.</span></td><td>화면이 뒤집혀 보이면 [⇅ 위아래 뒤집기](U 키, 조작 패널 제목줄의 ⇅). 장면이 옆으로 누워 있으면 [⤒ 위 방향] 메뉴에서 축을 고르세요.</td></tr>
+<tr><td><code>E17</code></td><td><span class="tag block">진행 불가</span></td><td><b>지운 결과를 저장하지 못했습니다</b><br><span style="color:#94a3b8">저장은 원본 파일을 다시 읽어 지운 가우시안만 빼고 새 파일을 만드는 방식입니다. 원본 파일을 옮기거나 지우거나 수정했으면 다시 읽을 수 없고, 저장 공간·메모리가 부족해도 실패합니다.</span></td><td>원본 파일이 처음 열었던 자리에 그대로 있는지 확인하고 다시 저장하세요. 창을 닫지 않았다면 지운 내용은 그대로 남아 있습니다. 파일이 매우 크면 저장 위치의 여유 공간도 확인하세요.</td></tr>
 </table>
 
 <h2 id="faq">10. 자주 묻는 질문</h2>
+<h3>잘못 지웠어요. 여러 단계 전으로 돌아가려면?</h3><p>지우개 패널의 <b>📜 작업 기록</b>에서 돌아갈 줄을 누르세요. 한 단계씩은 <kbd>Ctrl</kbd>+<kbd>Z</kbd>(되돌리기) / <kbd>Ctrl</kbd>+<kbd>Y</kbd>(다시 실행). [전체 복원]도 되돌리기로 취소됩니다.</p>
+<h3>지우개로 지우면 원본 파일이 망가지나요?</h3><p>아닙니다. 지운 것은 화면에서만 숨겨지고, [지운 결과 저장]을 누르면 <b>새 파일</b>이 만들어집니다. 원본은 그대로입니다.</p>
+<h3>지우개가 뒤에 있는 것까지 지워 버려요 / 한 번에 더 깊이 지우고 싶어요</h3><p>패널의 "어디까지(깊이) 지울까"에서 고르세요. 겉만 = 보이는 층만(<kbd>1</kbd>), 더 깊이 = 여러 층(<kbd>2</kbd>~<kbd>9</kbd>), 잡티만 = 큰 가우시안만(<kbd>B</kbd>), 통째로 = 전부(<kbd>0</kbd>). 자세한 내용은 <a href="#eraser">4-1장</a>.</p>
 <h3>Cesium 이나 다른 프로그램을 설치해야 하나요?</h3><p>아닙니다. 이 앱은 웹페이지 하나입니다. 브라우저(Chrome 권장, WebGL2 필요)만 있으면 됩니다. 렌더링은 Spark(three.js) 라이브러리가 페이지 안에서 합니다.</p>
 <h3>파일이 서버로 올라가나요?</h3><p>아닙니다. 파일은 브라우저 메모리에서만 읽힙니다. 네트워크 요청은 페이지 자체와 샘플 다운로드 외에 없습니다.</p>
 <h3>왜 같은 점을 5번이나 클릭하나요?</h3><p>2번이면 계산은 되지만 둘이 어긋났을 때 누가 틀렸는지 모릅니다. 5번이면 하나가 튀어도 σ가 커져 바로 알 수 있고, 평균이 잡혀 더 정확합니다(논문 실험도 5회). 설정에서 바꿀 수 있습니다.</p>

@@ -114,6 +114,8 @@ a{color:var(--accent)}
 
 /* toasts */
 #toasts{position:absolute;left:14px;bottom:calc(var(--coach-h) + 12px);z-index:50;display:flex;flex-direction:column;gap:8px;max-width:520px}
+/* 알림 묶음의 빈 곳은 3D 화면 클릭·붓질을 막지 않게. 버튼 없는 안내(passive)는 위에서도 그대로 통과 */
+#toasts{pointer-events:none} #toasts .toast{pointer-events:auto} #toasts .toast.passive{pointer-events:none}
 .toast{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:10px;padding:10px 12px;font-size:13px;box-shadow:0 8px 30px #0009;animation:pop .2s ease-out}
 .toast.block{border-left-color:var(--poor)} .toast.warn{border-left-color:var(--fair)} .toast.info{border-left-color:var(--accent)} .toast.good{border-left-color:var(--good)}
 .toast b{display:block;margin-bottom:3px}
@@ -187,3 +189,29 @@ input.mini{width:54px}
 .opt.on{border-color:var(--accent);background:#0e2a3a}
 .opt .d{display:block;color:var(--muted);font-size:12px;margin-top:2px}
 .cmp td,.cmp th{font-size:12px;vertical-align:top}
+
+/* eraser */
+#gl.erasing canvas{cursor:crosshair}
+#eraser-panel{background:var(--panel2);border-radius:8px;padding:8px;margin-bottom:8px}
+/* 고른 방식만 설명·조절 막대를 펼쳐 패널이 한 화면에 들어오게 (나머지는 제목만, 설명은 아래 그림이 대신) */
+#eraser-panel .opt{cursor:pointer}
+#eraser-panel .opt:not(.on) .d,#eraser-panel .opt:not(.on) .rowline{display:none}
+#er-diagram{border:1px dashed var(--line);border-radius:8px;padding:6px 8px;margin:6px 0}
+#er-diagram svg{display:block;max-width:300px;margin:0 auto 2px}
+#btn-eraser.dirty::after{content:'●';color:var(--fair);margin-left:4px;font-size:10px}
+/* 도구막대가 창 폭을 넘지 않도록 좁은 화면에서 단축키 표시·여백을 줄임 */
+@media (max-width:2000px){#topbar kbd{display:none}}
+@media (max-width:1700px){#topbar{gap:6px;padding:0 8px}#topbar .group{gap:4px;padding:0 4px}#topbar .btn{padding:7px 8px}}
+@media (max-width:1480px){.brand .name{display:none}#topbar .btn{padding:6px 6px;font-size:12px}}
+/* 지우개 작업 기록 (되돌리기·다시 실행) */
+#er-hist-box{margin:6px 0;border:1px solid var(--line);border-radius:8px;padding:4px 8px}
+#er-hist-box summary{cursor:pointer;font-size:12px}
+#er-hist{position:relative;list-style:none;margin:4px 0;padding:0;max-height:118px;overflow:auto;font-size:12px}
+#er-hist li{padding:2px 6px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#er-hist li:hover{background:#ffffff14}
+#er-hist li.cur{background:#0e2a3a;color:#fff;font-weight:600;outline:1px solid var(--accent)}
+#er-hist li.fut{opacity:.5;font-style:italic}
+#er-hist li.gap{cursor:default;color:var(--muted)}
+#er-hist .tag-cur{color:#38bdf8;font-weight:600}
+#er-mini{background:var(--panel2);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:12px}
+#er-mini .btnrow{margin-top:4px}

@@ -12,13 +12,13 @@ const DEG = Math.PI / 180;
 
 // ------------------------------------------------------------------ 상태
 const state = {
-  file: null, header: null, mesh: null, bounds: null, centers: null, coordOffset: null, cloud: null, points3: null,
+  file: null, header: null, mesh: null, bounds: null, centers: null, coordOffset: null, cloud: null, points3: null, srcFile: null, er: null, eraser: false,
   unit: { known: false, factor: 1, sigmaRel: 0, source: '' },
   upSource: null,
   task: null,            // {kind:'point'|'distance'|'calib', pts:[], trueLen?}
   rays: [], estimate: null, refPatch: null, autoRotCount: 0,
   points: [], dists: [], geoms: [], selected: new Set(), nextId: 1, nextGeomId: 1,
-  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, viewMode: 'splat', ptSize: 1, ptMode: 'dense', ptScale: 0.7, ptMaxPx: 6, hideBig: true, densify: 'auto', cloudColor: 'rgb', pickSplat: false, pickMode: 'cluster', pickRadius: 8, pickHelpSeen: false, dunit: 'auto', labels: true },
+  settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: 'm', loupeHiRes: true, autoRotate: true, rotAxis: 'screen', rotPattern: 'right', rotStep: 0, navpad: true, navStep: 15, viewMode: 'splat', ptSize: 1, ptMode: 'dense', ptScale: 0.7, ptMaxPx: 6, hideBig: true, densify: 'auto', cloudColor: 'rgb', pickSplat: false, pickMode: 'cluster', pickRadius: 8, pickHelpSeen: false, erSize: 30, erMode: 'front', erLayers: 3, erBig: 3, dunit: 'auto', labels: true },
   autoPivot: null, autoAngleDeg: 0, autoTiltDeg: 0, loupeHiResFailed: false, gcpInputs: {},
   mouse: { x: 0, y: 0, inside: false },
   webgl2: true,
@@ -77,6 +77,7 @@ function checkPole() { if (!state.mesh || !state.dragging) return; const off = c
 function loop() {
   requestAnimationFrame(loop);
   tickAnimations();
+  if (state.eraser && state.er && (state.er.down || state.er.flushPending)) eraseTick();
   controls.update(); checkPole();
   if (state.bounds) updateClipPlanes();
   if (state.mesh || state.points3) renderer.render(scene, camera);
@@ -493,29 +494,37 @@ function parsePlyHeader(buf) {
 }
 // ================================================================== 점군 보기 · 1클릭 직접 선택
 const SH_C0 = 0.28209479177387814;
-function buildCloudFromPly(buf, h) { // 3DGS PLY → {pos Float32Array(N*3), col Uint8Array(N*3, sRGB), rad Float32Array(N, 가우시안 반경), n}
+function buildCloudFromPly(buf, h) { // 3DGS PLY → 점군 {pos,col(sRGB),rad,scl,quat,src(행 번호),n} + all {pos,alpha,rad,n}(모든 행, 지우개·저장용)
   if (!h || h.compressed || h.format !== 'binary_little_endian' || h.order[0] !== 'vertex') return null;
   const v = h.elements.vertex; if (v.props.some((q) => q.type !== 'float' && q.type !== 'float32')) return null;
-  const k = v.props.length, ix = h.names.indexOf('x'), ir = h.names.indexOf('f_dc_0'), io = h.names.indexOf('opacity'), is0 = h.names.indexOf('scale_0'); if (ix < 0) return null;
+  const k = v.props.length, ix = h.names.indexOf('x'), ir = h.names.indexOf('f_dc_0'), io = h.names.indexOf('opacity'), is0 = h.names.indexOf('scale_0'), has2 = h.names.includes('scale_2'); if (ix < 0) return null;
   const aligned = h.headerLength % 4 === 0; const f32 = aligned ? new Float32Array(buf, h.headerLength, v.count * k) : new Float32Array(buf.slice(h.headerLength, h.headerLength + v.count * k * 4));
-  const iq = h.names.indexOf('rot_0'); const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3), rad = new Float32Array(v.count), scl = new Float32Array(v.count * 3), quat = new Float32Array(v.count * 4); let n = 0;
-  for (let i = 0; i < v.count; i++) { const b = i * k; if (io >= 0 && 1 / (1 + Math.exp(-f32[b + io])) < 0.05) continue; pos[3 * n] = f32[b + ix]; pos[3 * n + 1] = f32[b + ix + 1]; pos[3 * n + 2] = f32[b + ix + 2];
+  const N = v.count, iq = h.names.indexOf('rot_0'); const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N), scl = new Float32Array(N * 3), quat = new Float32Array(N * 4), src = new Uint32Array(N);
+  const aPos = new Float32Array(N * 3), aAlpha = new Uint8Array(N), aRad = new Float32Array(N); let n = 0;
+  for (let i = 0; i < N; i++) { const b = i * k; const op = io >= 0 ? 1 / (1 + Math.exp(-f32[b + io])) : 1; const x = f32[b + ix], y = f32[b + ix + 1], z = f32[b + ix + 2];
+    let a = 0, b2 = 0, c2 = 0, r = 0; if (is0 >= 0) { a = Math.exp(f32[b + is0]); b2 = Math.exp(f32[b + is0 + 1]); c2 = has2 ? Math.exp(f32[b + is0 + 2]) : Math.min(a, b2); const mn = Math.min(a, b2, c2); r = mn > 0 ? Math.sqrt(a * b2 * c2 / mn) : 0; }
+    aPos[3 * i] = x; aPos[3 * i + 1] = y; aPos[3 * i + 2] = z; aAlpha[i] = Math.round(op * 255); aRad[i] = r;
+    if (op < 0.05) continue; pos[3 * n] = x; pos[3 * n + 1] = y; pos[3 * n + 2] = z; src[n] = i;
     if (ir >= 0) for (let c = 0; c < 3; c++) col[3 * n + c] = Math.max(0, Math.min(255, Math.round((0.5 + SH_C0 * f32[b + ir + c]) * 255))); else col[3 * n] = col[3 * n + 1] = col[3 * n + 2] = 200;
-    if (is0 >= 0) { const a = Math.exp(f32[b + is0]), b2 = Math.exp(f32[b + is0 + 1]), c2 = h.names.includes('scale_2') ? Math.exp(f32[b + is0 + 2]) : Math.min(a, b2); const srt = [a, b2, c2].sort((x, y) => y - x); rad[n] = Math.sqrt(srt[0] * srt[1]); scl[3 * n] = a; scl[3 * n + 1] = b2; scl[3 * n + 2] = c2; } else { rad[n] = 0; scl[3 * n] = scl[3 * n + 1] = scl[3 * n + 2] = 0; }
+    rad[n] = r; scl[3 * n] = a; scl[3 * n + 1] = b2; scl[3 * n + 2] = c2;
     if (iq >= 0) { const qw = f32[b + iq], qx = f32[b + iq + 1], qy = f32[b + iq + 2], qz = f32[b + iq + 3]; const L = Math.hypot(qw, qx, qy, qz) || 1; quat[4 * n] = qw / L; quat[4 * n + 1] = qx / L; quat[4 * n + 2] = qy / L; quat[4 * n + 3] = qz / L; } else { quat[4 * n] = 1; } n++; }
-  return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), n };
+  return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), src: src.subarray(0, n), n, all: { pos: aPos, alpha: aAlpha, rad: aRad, n: N } };
 }
-function buildCloudFromMesh(mesh) { try { const src = mesh.splats || mesh.packedSplats; const N = src?.numSplats || 0; if (!N || !src.forEachSplat) return null; const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N), scl = new Float32Array(N * 3), quat = new Float32Array(N * 4); let n = 0; src.forEachSplat((i, c, sc, q, op, color) => { if (op < 0.05) return; pos[3 * n] = c.x; pos[3 * n + 1] = c.y; pos[3 * n + 2] = c.z; col[3 * n] = Math.round(color.r * 255); col[3 * n + 1] = Math.round(color.g * 255); col[3 * n + 2] = Math.round(color.b * 255); const srt = [sc.x, sc.y, sc.z].sort((x, y) => y - x); rad[n] = Math.sqrt(srt[0] * srt[1]); scl[3 * n] = sc.x; scl[3 * n + 1] = sc.y; scl[3 * n + 2] = sc.z; quat[4 * n] = q.w; quat[4 * n + 1] = q.x; quat[4 * n + 2] = q.y; quat[4 * n + 3] = q.z; n++; }); return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), n }; } catch (e) { console.warn('점군 추출 실패', e); return null; } }
+function buildCloudFromMesh(mesh) { try { const sp = mesh.splats || mesh.packedSplats; const N = sp?.numSplats || 0; if (!N || !sp.forEachSplat) return null; const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N), scl = new Float32Array(N * 3), quat = new Float32Array(N * 4), src = new Uint32Array(N), aPos = new Float32Array(N * 3), aAlpha = new Uint8Array(N), aRad = new Float32Array(N); let n = 0;
+  sp.forEachSplat((i, c, sc, q, op, color) => { const mn = Math.min(sc.x, sc.y, sc.z); const r = mn > 0 ? Math.sqrt(sc.x * sc.y * sc.z / mn) : 0; aPos[3 * i] = c.x; aPos[3 * i + 1] = c.y; aPos[3 * i + 2] = c.z; aAlpha[i] = Math.round(Math.max(0, Math.min(1, op)) * 255); aRad[i] = r; if (op < 0.05) return;
+    pos[3 * n] = c.x; pos[3 * n + 1] = c.y; pos[3 * n + 2] = c.z; col[3 * n] = Math.round(color.r * 255); col[3 * n + 1] = Math.round(color.g * 255); col[3 * n + 2] = Math.round(color.b * 255); rad[n] = r; scl[3 * n] = sc.x; scl[3 * n + 1] = sc.y; scl[3 * n + 2] = sc.z; quat[4 * n] = q.w; quat[4 * n + 1] = q.x; quat[4 * n + 2] = q.y; quat[4 * n + 3] = q.z; src[n] = i; n++; });
+  return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), src: src.subarray(0, n), n, all: { pos: aPos, alpha: aAlpha, rad: aRad, n: N } }; } catch (e) { console.warn('점군 추출 실패', e); return null; } }
 function cloudColors(cl) { const m = state.settings.cloudColor; const out = new Uint8Array(cl.n * 3); if (m === 'rgb') return cl.col;
   if (m === 'mono') { out.fill(190); return out; }
   const up = upVec(); let lo = Infinity, hi = -Infinity; const hs = new Float32Array(cl.n); for (let i = 0; i < cl.n; i++) { const hgt = cl.pos[3 * i] * up.x + cl.pos[3 * i + 1] * up.y + cl.pos[3 * i + 2] * up.z; hs[i] = hgt; }
   const sorted = Float32Array.from(hs).sort(); lo = sorted[Math.floor(cl.n * 0.02)]; hi = sorted[Math.floor(cl.n * 0.98)];
   for (let i = 0; i < cl.n; i++) { const t = THREE.MathUtils.clamp((hs[i] - lo) / Math.max(1e-9, hi - lo), 0, 1); const c = new THREE.Color().setHSL(0.7 - 0.7 * t, 0.9, 0.5); out[3 * i] = c.r * 255; out[3 * i + 1] = c.g * 255; out[3 * i + 2] = c.b * 255; } return out; }
 const CLOUD_VS = `
-attribute float rad; varying vec3 vColor;
+attribute float rad; attribute float vis; varying vec3 vColor;
 uniform float uFocal; uniform float uMode; uniform float uPx; uniform float uScale; uniform float uMinPx; uniform float uMaxPx; uniform float uHideBig; uniform float uBigRad;
 void main() {
   vColor = color;
+  if (vis < 0.5) { gl_PointSize = 0.0; gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; } // 지우개로 지운 가우시안
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   float px = uPx;
   if (uMode > 0.5) { px = 2.0 * rad * uScale * uFocal / max(-mv.z, 1e-4); px = clamp(px, uMinPx, uMaxPx); }
@@ -539,8 +548,9 @@ function buildDenseSamples(cl, K, colors) {
   let keep = 0; for (let i = 0; i < cl.n; i++) if (cl.rad[i] <= hide) keep++;
   const M = keep * K; const pos = new Float32Array(M * 3), col = new Uint8Array(M * 3);
   let seed = 123456789; const rnd = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
+  const ds = cl.denseStart = new Int32Array(cl.n).fill(-1);
   let m = 0; for (let i = 0; i < cl.n; i++) {
-    if (cl.rad[i] > hide) continue;
+    if (cl.rad[i] > hide) continue; ds[i] = m;
     const cx = cl.pos[3 * i], cy = cl.pos[3 * i + 1], cz = cl.pos[3 * i + 2]; const sx = cl.scl[3 * i] * spread, sy = cl.scl[3 * i + 1] * spread, sz = cl.scl[3 * i + 2] * spread;
     const qw = cl.quat[4 * i], qx = cl.quat[4 * i + 1], qy = cl.quat[4 * i + 2], qz = cl.quat[4 * i + 3];
     const r00 = 1 - 2 * (qy * qy + qz * qz), r01 = 2 * (qx * qy - qz * qw), r02 = 2 * (qx * qz + qy * qw), r10 = 2 * (qx * qy + qz * qw), r11 = 1 - 2 * (qx * qx + qz * qz), r12 = 2 * (qy * qz - qx * qw), r20 = 2 * (qx * qz - qy * qw), r21 = 2 * (qy * qz + qx * qw), r22 = 1 - 2 * (qx * qx + qy * qy);
@@ -562,10 +572,10 @@ function rebuildPoints() {
   if (cl.rad && cl.bigRad == null) { const sorted = Float32Array.from(cl.rad).sort(); cl.bigRad = sorted[Math.floor(cl.n * 0.99)]; } // 반경 상위 1 % 기준값
   const colors = cloudColors(cl); const K = densifyFactor(cl); let src = cl, srcCol = colors, isDense = false;
   if (state.settings.ptMode === 'dense' && cl.scl && cl.quat) { const t0 = performance.now(); const d = buildDenseSamples(cl, K, colors); src = d; srcCol = d.col; isDense = true; state.denseInfo = { K, total: d.n, ms: Math.round(performance.now() - t0), mb: +(d.n * 15 / 1e6).toFixed(0) }; } else state.denseInfo = null;
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(src.pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(srcCol, 3, true)); g.setAttribute('rad', new THREE.BufferAttribute(isDense ? new Float32Array(src.n) : (cl.rad || new Float32Array(cl.n)), 1));
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(src.pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(srcCol, 3, true)); g.setAttribute('rad', new THREE.BufferAttribute(isDense ? new Float32Array(src.n) : (cl.rad || new Float32Array(cl.n)), 1)); g.setAttribute('vis', new THREE.BufferAttribute(new Uint8Array(src.n).fill(1), 1));
   const m = new THREE.ShaderMaterial({ vertexShader: CLOUD_VS, fragmentShader: CLOUD_FS, vertexColors: true, uniforms: { uFocal: { value: 1000 }, uMode: { value: 1 }, uPx: { value: 2 }, uScale: { value: 1 }, uMinPx: { value: 1 }, uMaxPx: { value: 24 }, uHideBig: { value: 1 }, uBigRad: { value: 1e30 } }, depthTest: true, depthWrite: true });
   cloudUniforms(m); updateDenseLabel();
-  state.points3 = new THREE.Points(g, m); state.points3.frustumCulled = false; state.points3.onBeforeRender = () => cloudUniforms(m); scene.add(state.points3); applyViewMode();
+  state.points3 = new THREE.Points(g, m); state.points3.frustumCulled = false; state.points3.userData = { dense: isDense, K }; state.points3.onBeforeRender = () => cloudUniforms(m); scene.add(state.points3); updatePointsVis(); applyViewMode();
 }
 function applyViewMode() {
   const mode = state.settings.viewMode; const names = { splat: '스플랫', cloud: '점군', both: '겹침' };
@@ -581,8 +591,8 @@ function directPick(px, py) {
   const cl = state.cloud; if (!cl) return null;
   const ray = rayFromPixel(px, py); const o = ray.o, d = ray.d; const f = focalPx();
   for (let rad = state.settings.pickRadius; rad <= 40; rad *= 2) {
-    const tanA = rad / f; const hits = [];
-    for (let i = 0; i < cl.n; i++) { const vx = cl.pos[3 * i] - o.x, vy = cl.pos[3 * i + 1] - o.y, vz = cl.pos[3 * i + 2] - o.z; const t = vx * d.x + vy * d.y + vz * d.z; if (t <= 1e-6) continue; const perp2 = vx * vx + vy * vy + vz * vz - t * t; const lim = t * tanA; if (perp2 < lim * lim) hits.push({ t, i, ang: Math.sqrt(Math.max(0, perp2)) / t }); }
+    const tanA = rad / f; const hits = []; const erm = state.er && state.er.count && cl.src ? state.er.mask : null;
+    for (let i = 0; i < cl.n; i++) { if (erm && erm[cl.src[i]]) continue; const vx = cl.pos[3 * i] - o.x, vy = cl.pos[3 * i + 1] - o.y, vz = cl.pos[3 * i + 2] - o.z; const t = vx * d.x + vy * d.y + vz * d.z; if (t <= 1e-6) continue; const perp2 = vx * vx + vy * vy + vz * vz - t * t; const lim = t * tanA; if (perp2 < lim * lim) hits.push({ t, i, ang: Math.sqrt(Math.max(0, perp2)) / t }); }
     if (!hits.length) continue;
     if (state.settings.pickMode === 'nearest') { let b = hits[0]; for (const h of hits) if (h.ang < b.ang) b = h; return { p: new THREE.Vector3(cl.pos[3 * b.i], cl.pos[3 * b.i + 1], cl.pos[3 * b.i + 2]), sigma: 0, n: 1, mode: 'nearest', radius: rad }; }
     hits.sort((a, b) => a.t - b.t); const K = Math.max(3, Math.floor(hits.length * 0.03)); let s0 = -1;
@@ -676,6 +686,7 @@ async function loadFiles(fileList) {
   // 이전 모델 제거
   if (state.mesh) { scene.remove(state.mesh); try { state.mesh.dispose?.(); } catch (_) {} state.mesh = null; }
   if (state.points3) { scene.remove(state.points3); state.points3 = null; } state.cloud = null;
+  if (state.eraser) setEraser(false); state.er = null; state.erFlash = null; state.srcFile = main; updateEraserUI();
   resetAll(true); state.coordOffset = null;
   if (header) { // 지역·국가 좌표계처럼 좌표가 크면 원점 이동 (float32 정밀도 보호). 원래 좌표는 origCoord() 로 복원
     const sample = positionsFromPly(buf, header);
@@ -700,7 +711,7 @@ async function loadFiles(fileList) {
   if (!pos) { try { const src = mesh.splats || mesh.packedSplats; const n = src?.numSplats || 0; const step = Math.max(1, Math.floor(n / 150000)); const arr = []; src?.forEachSplat?.((i, c) => { if (i % step === 0) arr.push(c.x, c.y, c.z); }); if (arr.length) pos = arr; } catch (e) { console.warn('forEachSplat 실패', e); } }
   state.bounds = pos ? boundsFromPositions(pos) : { center: new THREE.Vector3(), radius: 5 };
   state.centers = pos ? Float32Array.from(pos) : null; // 휠 줌의 표면 깊이 추정용 표본
-  state.cloud = (header ? buildCloudFromPly(buf, header) : null) || buildCloudFromMesh(mesh); rebuildPoints(); if (state.cloud) state.centers = state.cloud.n > 200000 ? (() => { const step = Math.ceil(state.cloud.n / 200000); const out = new Float32Array(Math.ceil(state.cloud.n / step) * 3); let m = 0; for (let i = 0; i < state.cloud.n; i += step) { out[3 * m] = state.cloud.pos[3 * i]; out[3 * m + 1] = state.cloud.pos[3 * i + 1]; out[3 * m + 2] = state.cloud.pos[3 * i + 2]; m++; } return out.subarray(0, m * 3); })() : state.cloud.pos;
+  state.cloud = (header ? buildCloudFromPly(buf, header) : null) || buildCloudFromMesh(mesh); rebuildPoints(); if (state.cloud) rebuildCenters();
   // 함께 놓은 JSON: 축척 사이드카 / 학습 카메라(cameras.json) 구분
   let sidecar = null, cams = null;
   for (const jf of jsons) { try { const j = JSON.parse(await jf.text()); if (Array.isArray(j) && j.length && j[0].rotation && j[0].position) cams = j; else if (j && typeof j === 'object' && !sidecar) sidecar = j; } catch (e) { showError('E12', `${jf.name}: JSON 구문 오류 ${String(e).slice(0, 80)}`); } }
@@ -719,7 +730,7 @@ async function loadFiles(fileList) {
   resolveUnits(header, sidecar);
   // UI
   $('#loading').hidden = true; $('#dropzone').classList.add('hidden');
-  ['#btn-point', '#btn-dist', '#btn-scale', '#btn-export', '#btn-up', '#btn-home', '#btn-navpad', '#btn-analyze', '#btn-view'].forEach((s) => ($(s).disabled = false));
+  ['#btn-point', '#btn-dist', '#btn-scale', '#btn-export', '#btn-up', '#btn-home', '#btn-navpad', '#btn-analyze', '#btn-view', '#btn-eraser'].forEach((s) => ($(s).disabled = false));
   $('#btn-view').disabled = false; applyViewMode();
   $('#navpad').hidden = !state.settings.navpad;
   glHost.classList.remove('measuring');
@@ -752,6 +763,7 @@ function applyUnitUI() {
 // ------------------------------------------------------------------ 측정 작업
 function startTask(kind, extra = {}) {
   if (!state.mesh) return;
+  if (state.eraser) setEraser(false);
   cancelPoint(false);
   state.task = { kind, pts: [], ...extra };
   $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active'));
@@ -772,7 +784,7 @@ function taskLabel() {
 function endTask() {
   state.task = null; cancelPoint(false);
   $$('#btn-point,#btn-dist,#btn-analyze').forEach((b) => b.classList.remove('active'));
-  glHost.classList.remove('measuring'); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; $('#loupe').hidden = true;
+  glHost.classList.remove('measuring'); $('#measure-idle').hidden = !!state.eraser; $('#measure-live').hidden = true; $('#loupe').hidden = true;
   coach('', state.mesh ? '<b>● 점 측정</b> 또는 <b>↔ 거리 측정</b>을 눌러 시작하세요.' : '3DGS 파일을 열어 시작하세요.');
 }
 function cancelPoint(ui = true) { state.rays = []; state.estimate = null; state.refPatch = null; state.autoRotCount = 0; if (ui) updateMeasureUI(); }
@@ -926,6 +938,10 @@ function drawOverlay() {
     // 클릭 지점 표시 (현재 뷰에서 찍은 광선의 화면 위치는 카메라가 움직이면 의미 없음 → 마지막 클릭이 현 시점일 때만)
     const last = state.rays[state.rays.length - 1]; if (last && last.camPos.distanceToSquared(camera.position) < 1e-12) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(last.screen.x, last.screen.y, 6, 0, Math.PI * 2); ctx.stroke(); }
   }
+  if (state.erFlash) { const age = (performance.now() - state.erFlash.t0) / 1400; const bb = age < 1 ? erFlashBox() : null; // 되돌리기/다시 실행으로 바뀐 자리 표시 (1.4초 동안 서서히 사라짐)
+    if (age >= 1) state.erFlash = null; else if (bb) { ctx.save(); ctx.globalAlpha = 1 - age * age; ctx.setLineDash([6, 4]); ctx.lineWidth = 2; ctx.strokeStyle = '#000b'; ctx.strokeRect(bb.x0, bb.y0, bb.x1 - bb.x0, bb.y1 - bb.y0); ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.5; ctx.strokeRect(bb.x0, bb.y0, bb.x1 - bb.x0, bb.y1 - bb.y0); ctx.setLineDash([]);
+      ctx.font = 'bold 13px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; const ty = bb.y0 > 20 ? bb.y0 - 4 : bb.y1 + 18; ctx.lineWidth = 3; ctx.strokeStyle = '#000c'; ctx.strokeText(state.erFlash.label, bb.x0, ty); ctx.fillStyle = '#bae6fd'; ctx.fillText(state.erFlash.label, bb.x0, ty); ctx.restore(); } }
+  if (state.eraser && state.mouse.inside) { const R = state.settings.erSize, mx = state.mouse.x, my = state.mouse.y; ctx.strokeStyle = '#000a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(mx, my, R, 0, Math.PI * 2); ctx.stroke(); ctx.strokeStyle = state.er && state.er.down ? '#ef4444' : '#f472b6'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(mx, my, R, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(mx - 4, my); ctx.lineTo(mx + 4, my); ctx.moveTo(mx, my - 4); ctx.lineTo(mx, my + 4); ctx.stroke(); const lb = erModeShort(); ctx.font = 'bold 12px system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; const lx = mx + R * 0.71 + 5, ly = my - R * 0.71 - 3; ctx.lineWidth = 3; ctx.strokeStyle = '#000c'; ctx.strokeText(lb, lx, ly); ctx.fillStyle = '#fbcfe8'; ctx.fillText(lb, lx, ly); }
 }
 function pill(ctx, x, y, text, color, small = false) { ctx.font = `${small ? 12 : 13}px system-ui, sans-serif`; const tw = ctx.measureText(text).width; const px = 6, hgt = small ? 18 : 20; ctx.fillStyle = '#0b1020d9'; ctx.strokeStyle = color; ctx.lineWidth = 1; roundRect(ctx, x, y - hgt / 2, tw + 2 * px, hgt, 6); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(text, x + px, y + 1); }
 function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
@@ -975,6 +991,233 @@ function updateCheckDot() {
 function openModal(html) { $('#modal-body').innerHTML = html; $('#modal').hidden = false; }
 function closeModal() { $('#modal').hidden = true; $('#modal-body').innerHTML = ''; }
 $('#modal-close').onclick = closeModal; $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+// ================================================================== 지우개 (잡티·원하는 부분 지우기) + 저장
+// 화면에서 붓으로 문지르면 그 아래 가우시안을 숨긴다(렌더러의 불투명도를 0 으로). 원본 데이터는 바꾸지 않으며,
+// 저장할 때 원본 파일을 다시 읽어 지운 행만 빼고 새 PLY 를 만든다.
+const ER_G = 13, ER_PAD = 1.4; // 층 판정: 붓보다 1.4 배 넓은 범위를 13×13 칸으로 나눠 칸마다 층을 센다 (붓 바로 밖의 가우시안도 가장자리를 가리므로 가림 계산에는 넣고, 지우는 것은 붓 안쪽만)
+function splatStore() { const m = state.mesh; return m ? (m.splats || m.packedSplats || null) : null; }
+function eraserInit() {
+  if (state.er) return true;
+  const all = state.cloud && state.cloud.all, sp = splatStore();
+  if (!all || !sp) { toast('이 파일은 지우개를 쓸 수 없습니다(가우시안 정보를 읽지 못함).', 'warn', 6000); return false; }
+  const N = all.n, kind = sp.packedArray ? 'packed' : sp.extArrays ? 'ext' : null;
+  if (!kind || sp.numSplats !== N) { toast(`이 파일은 렌더러 내부 구조가 달라 지우개를 쓸 수 없습니다 (렌더러 ${sp.numSplats} / 파일 ${N}).`, 'warn', 7000); return false; }
+  const step = Math.max(1, Math.floor(N / 200000)); const tmp = []; for (let i = 0; i < N; i += step) tmp.push(all.rad[i]); tmp.sort((a, b) => a - b);
+  state.er = { mask: new Uint8Array(N), count: 0, undo: [], redo: [], seq: 0, savedAt: null, orig: null, kind, medRad: tmp[tmp.length >> 1] || 0, saved: true, down: false, pending: null, last: null, stroke: null, lastFlush: 0, cand: new Int32Array(65536), candT: new Float32Array(65536) };
+  return true;
+}
+function erSetHidden(idxs, hide) { // idxs: 파일(PLY) 행 번호들
+  const er = state.er, sp = splatStore(); if (!sp) return; const N = er.mask.length;
+  if (er.kind === 'packed') { const A = sp.packedArray; if (!er.orig) { er.orig = new Uint8Array(N); for (let i = 0; i < N; i++) er.orig[i] = A[i * 4] >>> 24; }
+    for (let k = 0; k < idxs.length; k++) { const i = idxs[k]; A[i * 4] = hide ? (A[i * 4] & 0x00ffffff) : ((A[i * 4] & 0x00ffffff) | (er.orig[i] << 24)); } }
+  else { const A = sp.extArrays[0]; if (!er.orig) { er.orig = new Uint16Array(N); for (let i = 0; i < N; i++) er.orig[i] = A[i * 4 + 3] & 0xffff; }
+    for (let k = 0; k < idxs.length; k++) { const i = idxs[k]; A[i * 4 + 3] = hide ? (A[i * 4 + 3] & 0xffff0000) : ((A[i * 4 + 3] & 0xffff0000) | er.orig[i]); } }
+  for (let k = 0; k < idxs.length; k++) { const i = idxs[k]; if (hide) { if (!er.mask[i]) { er.mask[i] = 1; er.count++; } } else if (er.mask[i]) { er.mask[i] = 0; er.count--; } }
+}
+function erFlush(force) { const er = state.er, sp = splatStore(); if (!er || !sp) return; const now = performance.now(); if (!force && now - er.lastFlush < 80) { er.flushPending = true; return; } er.lastFlush = now; er.flushPending = false; if ('needsUpdate' in sp) sp.needsUpdate = true; if (sp.textures) for (const t of sp.textures) t.needsUpdate = true; if (state.mesh.updateVersion) state.mesh.updateVersion(); }
+function erLayerCount() { const st = state.settings; return st.erMode === 'multi' ? Math.max(2, Math.min(10, Math.round(st.erLayers) || 3)) : 1; }
+function erModeName() { const m = state.settings.erMode; return m === 'front' ? '보이는 층만 (1층)' : m === 'multi' ? `여러 층 (${erLayerCount()}층)` : m === 'big' ? '큰 가우시안만' : '전부 (관통)'; }
+function erModeShort() { const m = state.settings.erMode; return m === 'front' ? '1층' : m === 'multi' ? `${erLayerCount()}층` : m === 'big' ? '큰 것만' : '전부'; }
+// 설명 그림: 옆에서 본 단면. 왼쪽 눈(화면)에서 붓이 뻗어 나가고, 겹(①~⑤)과 큰 잡티(●) 중 이번 붓질에 지워지는 것을 분홍 점선으로 표시
+function erDiagram() {
+  const mode = state.settings.erMode, L = erLayerCount(), X = [78, 122, 166, 210, 254], blobs = [[100, 27, 1], [188, 45, 3]]; // blob: x, y, 앞에 있는 겹 수
+  const gone = (k) => mode === 'all' || (mode === 'front' && k === 0) || (mode === 'multi' && k < L), bgone = (b) => mode === 'all' || mode === 'big' || (mode === 'multi' && b[2] < L);
+  let h = '<svg viewBox="0 0 280 86" width="100%" role="img" aria-label="지우는 깊이 설명 그림"><path d="M22 38 L272 10 L272 66 Z" fill="#f472b622" stroke="#f472b655" stroke-width="1"/><circle cx="14" cy="38" r="7" fill="none" stroke="#cbd5e1" stroke-width="1.5"/><circle cx="16" cy="38" r="2.5" fill="#cbd5e1"/><text x="14" y="58" font-size="9" fill="#94a3b8" text-anchor="middle">화면</text>';
+  X.forEach((x, k) => { const g = gone(k), y0 = 38 - (x - 22) * 0.112 - 3, y1 = 38 + (x - 22) * 0.112 + 3; h += `<line x1="${x}" y1="${y0.toFixed(1)}" x2="${x}" y2="${y1.toFixed(1)}" stroke="${g ? '#f472b6' : '#94a3b8'}" stroke-width="5" stroke-linecap="round" ${g ? 'stroke-dasharray="1 7" opacity="0.9"' : ''}/><text x="${x}" y="82" font-size="10" fill="${g ? '#f472b6' : '#94a3b8'}" text-anchor="middle">${'①②③④⑤'[k]}${g ? '✕' : ''}</text>`; });
+  blobs.forEach((b) => { const g = bgone(b); h += `<circle cx="${b[0]}" cy="${b[1]}" r="8" fill="${g ? 'none' : '#64748b88'}" stroke="${g ? '#f472b6' : '#94a3b8'}" stroke-width="1.5" ${g ? 'stroke-dasharray="3 3"' : ''}/>`; });
+  h += '</svg>';
+  const cap = mode === 'front' ? '<b>①</b>(지금 보이는 겉층)만 지워집니다. 마우스를 뗐다가 다시 문지르면 ② 가 지워집니다.' : mode === 'multi' ? `겉에서부터 <b>${L}겹</b>${L > 5 ? ' (그림은 5겹까지만 표시)' : ''}과 그 사이의 것이 한 번에 지워집니다. 그 뒤는 남습니다.` : mode === 'big' ? '깊이에 상관없이 <b>큰 것(●)</b>만 지워지고, 겹(실제 표면의 작은 가우시안)은 모두 남습니다.' : '붓 아래에 있는 것이 깊이에 상관없이 <b>전부</b> 지워집니다.';
+  return h + `<div class="small muted">세로 막대 = 화면을 가리는 한 겹(표면) · ● = 큰 잡티 · <span style="color:#f472b6">분홍 점선 ✕</span> = 이번 붓질에 지워짐<br>${cap}</div>`;
+}
+// 화면 타일 색인: 카메라가 그대로인 동안에는 전체 가우시안을 한 번만 화면에 투영해 48 px 타일별로 묶어 둔다 → 붓이 움직일 때마다 전체(수백만 개)를 다시 훑지 않고 붓 아래 타일만 본다
+const ER_TILE = 48, ER_TMARGIN = 384; // 화면 밖 여백(px): 붓이 화면 가장자리에 걸칠 때를 위해
+function erTiles() {
+  const er = state.er, all = state.cloud.all, P = all.pos, N = all.n, { w, h } = viewSize(), f = focalPx(); camera.updateMatrixWorld();
+  const me = camera.matrixWorld.elements; let key = `${N}|${w}|${h}|${f}`; for (let k = 0; k < 16; k++) key += '|' + me[k];
+  if (er.tiles && er.tiles.key === key) return er.tiles;
+  const T = ER_TILE, m = ER_TMARGIN, tw = Math.ceil((w + 2 * m) / T), th = Math.ceil((h + 2 * m) / T), start = new Uint32Array(tw * th + 1), tid = new Int32Array(N);
+  const rx = me[0], ry = me[1], rz = me[2], ux = me[4], uy = me[5], uz = me[6], fx = -me[8], fy = -me[9], fz = -me[10], cx = me[12], cy = me[13], cz = me[14], hw = w / 2 + m, hh = h / 2 + m, xmax = w + 2 * m, ymax = h + 2 * m;
+  for (let i = 0, j = 0; i < N; i++, j += 3) {
+    const vx = P[j] - cx, vy = P[j + 1] - cy, vz = P[j + 2] - cz, z = vx * fx + vy * fy + vz * fz; if (!(z > 1e-6)) { tid[i] = -1; continue; }
+    const sx = hw + (vx * rx + vy * ry + vz * rz) / z * f, sy = hh - (vx * ux + vy * uy + vz * uz) / z * f; if (!(sx >= 0 && sx < xmax && sy >= 0 && sy < ymax)) { tid[i] = -1; continue; }
+    const c = ((sy / T) | 0) * tw + ((sx / T) | 0); tid[i] = c; start[c + 1]++;
+  }
+  for (let c = 0; c < tw * th; c++) start[c + 1] += start[c];
+  const order = new Uint32Array(start[tw * th]), fill = start.slice(0, tw * th); for (let i = 0; i < N; i++) { const c = tid[i]; if (c >= 0) order[fill[c]++] = i; }
+  return (er.tiles = { key, tw, th, m, start, order, fx, fy, fz });
+}
+// 화면 점 (px,py) 를 중심으로 반지름 erSize px 붓 아래의 가우시안을 지운다 → 지운 개수
+function eraseAt(px, py) {
+  const er = state.er, all = state.cloud.all, P = all.pos, RAD = all.rad, mask = er.mask, N = all.n, st = state.settings;
+  const ray = rayFromPixel(px, py); const ox = ray.o.x, oy = ray.o.y, oz = ray.o.z, dx = ray.d.x, dy = ray.d.y, dz = ray.d.z;
+  const f = focalPx(), R = st.erSize, tan2 = (R / f) * (R / f), mode = st.erMode, bigThr = er.medRad * st.erBig;
+  const layered = mode === 'front' || mode === 'multi', L = erLayerCount(); // 층 방식: 겉에서부터 L 겹 (보이는 층만 = 1)
+  const Rg = R * ER_PAD, tanC = layered ? tan2 * ER_PAD * ER_PAD : tan2;
+  let ci = er.cand, ct = er.candT, M = 0;
+  // 붓 원뿔이 화면에서 차지하는 범위(화면 가장자리로 갈수록 늘어남)에 걸친 타일만 본다
+  const tl = erTiles(), cosT = Math.max(0.05, dx * tl.fx + dy * tl.fy + dz * tl.fz), tanT = Math.sqrt(Math.max(0, 1 - cosT * cosT)) / cosT, tanA = Math.sqrt(tanC);
+  const rpix = (tanT * tanA < 0.9 ? f * ((tanT + tanA) / (1 - tanT * tanA) - tanT) : 1e9) + 2, T = ER_TILE;
+  const tx0 = Math.max(0, Math.floor((px - rpix + tl.m) / T)), tx1 = Math.min(tl.tw - 1, Math.floor((px + rpix + tl.m) / T)), ty0 = Math.max(0, Math.floor((py - rpix + tl.m) / T)), ty1 = Math.min(tl.th - 1, Math.floor((py + rpix + tl.m) / T)), TS = tl.start, TO = tl.order;
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) for (let q = TS[ty * tl.tw + tx], qe = TS[ty * tl.tw + tx + 1]; q < qe; q++) {
+    const i = TO[q], j = 3 * i, mk = mask[i]; if (mk === 1 || (mk === 2 && !layered)) continue; // 1 = 이전 붓질에서 지움, 2 = 이번 붓질에서 지움(층 계산에서는 아직 가리는 것으로 취급 → 한 번의 붓질은 정한 층 수만큼만 벗김)
+    const vx = P[j] - ox, vy = P[j + 1] - oy, vz = P[j + 2] - oz; const t = vx * dx + vy * dy + vz * dz; if (t <= 1e-6) continue;
+    if (vx * vx + vy * vy + vz * vz - t * t >= t * t * tanC) continue; if (mode === 'big' && RAD[i] <= bigThr) continue;
+    if (M === ci.length) { const a = new Int32Array(M * 2); a.set(ci); ci = er.cand = a; const b = new Float32Array(M * 2); b.set(ct); ct = er.candT = b; }
+    ci[M] = i; ct[M] = t; M++;
+  }
+  if (!M) return 0;
+  let out;
+  if (!layered) out = ci.slice(0, M);
+  else { // 층 방식: 깊이순으로 훑으며 칸마다 덮임(coverage)이 1 에 이르면 한 층이 끝난 것으로 본다 (+ 그 깊이의 4 % 는 같은 층의 두께). 앞에서부터 L 층까지가 지울 대상
+    const ord = new Uint32Array(M); for (let k = 0; k < M; k++) ord[k] = k; ord.sort((a, b) => ct[a] - ct[b]);
+    const G = ER_G, cs = 2 * Rg / G, cov = new Float32Array(G * G), lay = new Uint8Array(G * G), tsat = new Float32Array(G * G).fill(-Infinity), ALPHA = all.alpha;
+    const hit = (c, t, w) => { // 칸 c 에서 이 가우시안이 몇 번째 층에 속하는지 → L 층 이내면 true. 덮임을 쌓아 층을 넘긴다
+      if (lay[c] > 0 && t <= tsat[c] * 1.04) return lay[c] <= L; // 방금 끝난 층의 두께 안 → 그 층에 속함
+      const v = lay[c] < L; cov[c] += w; if (cov[c] >= 1) { if (lay[c] < 255) lay[c]++; cov[c] = 0; tsat[c] = t; } return v; };
+    const dv = new THREE.Vector3(dx, dy, dz), rt = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion); rt.addScaledVector(dv, -rt.dot(dv)).normalize(); const uv = new THREE.Vector3().crossVectors(dv, rt); // 붓 중심 광선에 수직인 두 축 (붓이 화면 어디에 있든 칸 좌표의 원점 = 붓 중심)
+    const res = []; const clampI = (q) => (q < 0 ? 0 : q >= G ? G - 1 : q);
+    for (let k = 0; k < M; k++) {
+      const m = ord[k], i = ci[m], t = ct[m], j = 3 * i; const vx = P[j] - ox, vy = P[j + 1] - oy, vz = P[j + 2] - oz;
+      const u = (vx * rt.x + vy * rt.y + vz * rt.z) / t * f, w = (vx * uv.x + vy * uv.y + vz * uv.z) / t * f, rpx = RAD[i] * f / t, a = ALPHA[i] / 255; let vis = false;
+      if (rpx <= cs / 2) { if (hit(clampI(Math.floor((w + Rg) / cs)) * G + clampI(Math.floor((u + Rg) / cs)), t, a * Math.min(1, 2 * Math.PI * rpx * rpx / (cs * cs)))) vis = true; }
+      else { const ext = 1.5 * rpx, c0 = clampI(Math.floor((u - ext + Rg) / cs)), c1 = clampI(Math.floor((u + ext + Rg) / cs)), r0 = clampI(Math.floor((w - ext + Rg) / cs)), r1 = clampI(Math.floor((w + ext + Rg) / cs));
+        for (let r = r0; r <= r1; r++) for (let cc = c0; cc <= c1; cc++) if (hit(r * G + cc, t, a)) vis = true; }
+      if (vis && mask[i] === 0 && u * u + w * w < R * R) res.push(i); // 지우는 것은 붓 안쪽에 중심이 있는 것만
+    }
+    out = Int32Array.from(res);
+  }
+  if (!out.length) return 0; erSetHidden(out, true); if (er.stroke) { er.stroke.push(out); for (let k = 0; k < out.length; k++) mask[out[k]] = 2; } return out.length;
+}
+function erDown(x, y) { const er = state.er; if (!er) return; er.down = true; er.stroke = []; er.last = null; er.pending = { x, y }; eraseTick(); } // 누른 자리는 바로 지운다 (다음 프레임 전에 마우스가 움직여도 누른 자리가 빠지지 않게)
+function eraseTick() { // 프레임마다: 마지막 위치 → 현재 위치 사이를 붓 반지름의 0.6 배 간격으로 메우며 지움
+  const er = state.er; if (!er || !er.pending) { if (er && er.flushPending) erFlush(false); return; } const p = er.pending; er.pending = null; const a = er.last || p; const dist = Math.hypot(p.x - a.x, p.y - a.y); const steps = Math.min(6, Math.max(1, Math.ceil(dist / (state.settings.erSize * 0.6))));
+  let n = 0; for (let s = 1; s <= steps; s++) n += eraseAt(a.x + (p.x - a.x) * s / steps, a.y + (p.y - a.y) * s / steps); er.last = p; if (n) { erFlush(false); updateEraserUI(); }
+}
+function erUp() { const er = state.er; if (!er || !er.down) return; eraseTick(); er.down = false; const parts = er.stroke || []; er.stroke = null; const total = parts.reduce((s, q) => s + q.length, 0); if (!total) { erFlush(true); return; } const arr = new Int32Array(total); let o = 0; for (const q of parts) { arr.set(q, o); o += q.length; } for (let k = 0; k < arr.length; k++) er.mask[arr[k]] = 1; erPush({ op: 'erase', idx: arr, label: `붓질 · ${erModeShort()} · ${state.settings.erSize} px` }); }
+// 작업 기록: 항목 = { op: 'erase'(지움) | 'restore'(전체 복원), idx: 파일 행 번호들, no: 순번, label }.
+// 되돌리기 = 마지막 항목을 거꾸로 적용해 '다시 실행' 쪽으로 옮김, 다시 실행 = 그 반대. 새 작업을 하면 다시 실행 기록은 지워짐(일반 편집기와 같음)
+function erPush(entry) { const er = state.er; entry.no = ++er.seq; entry.n = entry.idx.length; er.undo.push(entry); er.redo = []; erAfterChange(); }
+function erApply(e, forward) { erSetHidden(e.idx, (e.op === 'erase') === forward); }
+function erAfterChange() { const er = state.er; const top = er.undo.length ? er.undo[er.undo.length - 1] : null; er.saved = er.count === 0 || (!!er.savedAt && er.savedAt.len === er.undo.length && er.savedAt.top === top); erFlush(true); updatePointsVis(); rebuildCenters(); updateEraserUI(); updateCheckDot(); }
+function erUndo() { const er = state.er; if (!er) return; if (er.down) erUp(); if (!er.undo.length) { toast('되돌릴 지우개 작업이 없습니다.', 'info', 1800).classList.add('passive'); return; } const e = er.undo.pop(); erApply(e, false); er.redo.push(e); erAfterChange(); erNotify('undo', [e]); }
+function erRedo() { const er = state.er; if (!er) return; if (er.down) erUp(); if (!er.redo.length) { toast('다시 실행할 작업이 없습니다. (되돌린 뒤에만 쓸 수 있습니다)', 'info', 2200).classList.add('passive'); return; } const e = er.redo.pop(); erApply(e, true); er.undo.push(e); erAfterChange(); erNotify('redo', [e]); }
+function erJump(pos) { // 작업 기록의 pos 단계(0 = 지우기 전 처음 상태)로 한 번에 이동
+  const er = state.er; if (!er) return; if (er.down) erUp(); const done = [], dir = pos < er.undo.length ? 'undo' : 'redo';
+  while (er.undo.length > pos) { const e = er.undo.pop(); erApply(e, false); er.redo.push(e); done.push(e); }
+  while (er.undo.length < pos && er.redo.length) { const e = er.redo.pop(); erApply(e, true); er.undo.push(e); done.push(e); }
+  if (!done.length) return; erAfterChange(); erNotify(dir, done);
+}
+function erRestoreAll() { const er = state.er; if (!er || !er.count) return; const idx = []; for (let i = 0; i < er.mask.length; i++) if (er.mask[i]) idx.push(i); const arr = Int32Array.from(idx); erSetHidden(arr, false); erPush({ op: 'restore', idx: arr, label: '전체 복원' }); toast('<b>전체 복원</b>지운 것을 모두 되살렸습니다. 이것도 <strong>↶ 되돌리기(Ctrl+Z)</strong>로 취소할 수 있습니다.', 'info', 4000); }
+// 되돌리기/다시 실행 알림: 무엇을 몇 개 바꿨는지 + 바뀐 자리를 화면에 잠시 표시
+function erNotify(kind, list) {
+  const er = state.er; let back = 0, gone = 0;
+  for (const e of list) { if ((e.op === 'erase') === (kind === 'redo')) gone += e.n; else back += e.n; }
+  const what = list.length === 1 ? `#${list[0].no} ${list[0].label}` : `${list.length}단계`; const parts = [];
+  if (back) parts.push(`가우시안 <strong>${back.toLocaleString()}</strong>개 되살림`); if (gone) parts.push(`가우시안 <strong>${gone.toLocaleString()}</strong>개 다시 지움`);
+  const seen = erFlash(list, kind === 'undo' ? '↶ 되돌림' : '↷ 다시 실행');
+  if (state.erToast) state.erToast.remove(); state.erToast = toast(`<b>${kind === 'undo' ? '↶ 되돌림' : '↷ 다시 실행'} — ${what}</b>${parts.join(', ')}${seen ? ' <span class="muted">(파란 점선 상자 자리)</span>' : ' <span class="muted">(지금 화면 밖)</span>'}<br><span class="muted small">되돌리기 ${er.undo.length}단계 · 다시 실행 ${er.redo.length}단계 가능</span>`, 'info', 3500); state.erToast.classList.add('passive');
+}
+function erFlash(list, label) { // 바뀐 가우시안 중 최대 1200개의 위치를 기억해 1.4초 동안 그 범위를 화면에 표시. 지금 화면에 보이면 true
+  const P = state.cloud.all.pos; let tot = 0; for (const e of list) tot += e.n; const step = Math.max(1, Math.ceil(tot / 1200)); const pts = []; let c = 0;
+  for (const e of list) for (let k = 0; k < e.idx.length; k++, c++) if (c % step === 0) { const i = e.idx[k]; pts.push(P[3 * i], P[3 * i + 1], P[3 * i + 2]); }
+  state.erFlash = { pts: Float32Array.from(pts), t0: performance.now(), label }; const bb = erFlashBox(); return !!bb;
+}
+const _fv = new THREE.Vector3();
+function erFlashBox() { const fl = state.erFlash; if (!fl) return null; const { w, h } = viewSize(); let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
+  for (let i = 0; i < fl.pts.length; i += 3) { _fv.set(fl.pts[i], fl.pts[i + 1], fl.pts[i + 2]); const s = project(_fv); if (!s.front || s.x < -50 || s.y < -50 || s.x > w + 50 || s.y > h + 50) continue; n++; if (s.x < x0) x0 = s.x; if (s.x > x1) x1 = s.x; if (s.y < y0) y0 = s.y; if (s.y > y1) y1 = s.y; }
+  return n ? { x0: Math.max(2, x0 - 10), y0: Math.max(2, y0 - 10), x1: Math.min(w - 2, x1 + 10), y1: Math.min(h - 2, y1 + 10) } : null; }
+// 작업 기록 목록: 맨 위 = 처음 상태, 아래로 갈수록 최근. 현재 위치 강조, 되돌린(다시 실행 가능한) 항목은 흐리게. 줄을 누르면 그 단계로 이동
+function erHistoryHTML() {
+  const er = state.er; if (!er) return ''; const list = er.undo.concat(er.redo.slice().reverse()), cur = er.undo.length, from = Math.max(0, list.length - 60);
+  let h = `<li data-pos="0" class="${cur === 0 ? 'cur' : ''}">처음 상태 (지우기 전)${cur === 0 ? ' <span class="tag-cur">◀ 지금</span>' : ''}</li>`;
+  if (from > 0) h += `<li class="gap">… 앞의 ${from}단계 생략</li>`;
+  for (let k = from; k < list.length; k++) { const e = list[k], pos = k + 1, fut = pos > cur;
+    h += `<li data-pos="${pos}" class="${pos === cur ? 'cur' : ''}${fut ? ' fut' : ''}" title="${fut ? '다시 실행해서 이 단계로' : '이 단계로 되돌리기'}">${fut ? '↷ ' : ''}#${e.no} ${e.label} — ${e.op === 'erase' ? '' : '되살림 '}${e.n.toLocaleString()}개${pos === cur ? ' <span class="tag-cur">◀ 지금</span>' : ''}</li>`; }
+  return h;
+}
+function updateEraserUI() {
+  const er = state.er, st = state.settings; const N = er ? er.mask.length : 0, M = er ? er.count : 0;
+  $('#er-count').innerHTML = er ? `지운 가우시안 <b>${M.toLocaleString()}</b> / ${N.toLocaleString()} (${N ? (100 * M / N).toFixed(2) : 0} %)${M && !er.saved ? ' · <span style="color:#f59e0b">저장 안 됨</span>' : M ? ' · 저장됨' : ''}` : '';
+  const nu = er ? er.undo.length : 0, nr = er ? er.redo.length : 0;
+  $$('#er-undo, #er-mini-undo').forEach((b) => (b.disabled = !nu)); $$('#er-redo, #er-mini-redo').forEach((b) => (b.disabled = !nr)); $('#er-reset').disabled = !M; $('#er-save').disabled = !M;
+  $$('.er-undo-n').forEach((x) => (x.textContent = nu ? `(${nu})` : '')); $$('.er-redo-n').forEach((x) => (x.textContent = nr ? `(${nr})` : ''));
+  const hl = $('#er-hist'); if (hl) { hl.innerHTML = erHistoryHTML(); $('#er-hist-n').textContent = er ? `${nu + nr}단계 · 지금 ${nu}단계` : ''; const c = hl.querySelector('.cur'); if (c) hl.scrollTop = Math.max(0, c.offsetTop - hl.clientHeight / 2); } // 목록 안에서만 스크롤 (scrollIntoView 는 바깥 화면까지 움직일 수 있음)
+  const mini = $('#er-mini'); if (mini) { mini.hidden = !!state.eraser || !er || !(nu || nr); if (!mini.hidden) $('#er-mini-text').innerHTML = `🧽 지우개 기록 — 지움 <b>${M.toLocaleString()}</b>개${M && !er.saved ? ' · <span style="color:#f59e0b">저장 안 됨</span>' : ''}`; }
+  $('#er-size').value = st.erSize; $('#er-size-label').textContent = `${st.erSize} px`; $('#er-big').value = st.erBig; $('#er-big-label').textContent = er ? `중앙값의 ${st.erBig}배 = ${fmtLen(er.medRad * st.erBig)} 이상` : `중앙값의 ${st.erBig}배`;
+  $$('input[name=ermode]').forEach((r) => (r.checked = r.value === st.erMode)); ['front', 'multi', 'big', 'all'].forEach((m) => $(`#er-opt-${m}`).classList.toggle('on', st.erMode === m));
+  const LL = Math.max(2, Math.min(10, Math.round(st.erLayers) || 3)); $('#er-layers').value = LL; $('#er-layers-label').textContent = `${LL}층`; $('#er-diagram').innerHTML = erDiagram();
+  $('#btn-eraser').classList.toggle('active', !!state.eraser); $('#btn-eraser').classList.toggle('dirty', !!(er && M && !er.saved));
+  if (state.eraser) coach('🧽', `<b>지우개 · ${erModeName()}</b> — <b>왼쪽 드래그</b>로 문질러 지웁니다 · 오른쪽 드래그: 회전 · 휠: 확대 · 붓 크기 <b>[ ]</b> · 깊이 <b>1</b>~<b>9</b>·<b>0</b>·<b>B</b> · 되돌리기 <b>Ctrl+Z</b> · 다시 실행 <b>Ctrl+Y</b> · 끝내기 <b>E</b>`, er && M ? `지움 ${M.toLocaleString()}개${er.saved ? '' : ' (저장 안 됨)'}` : '');
+}
+function setEraser(on) {
+  if (on) { if (!state.mesh || !eraserInit()) return; if (state.task) endTask(); state.eraser = true; controls.mouseButtons = { LEFT: -1, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }; showTab('measure'); }
+  else { if (state.er && state.er.down) erUp(); state.eraser = false; if (state.er) { state.er.down = false; state.er.pending = null; state.er.tiles = null; } controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }; if (!state.task) coach('', state.mesh ? '<b>● 점 측정</b> 또는 <b>↔ 거리 측정</b>을 눌러 시작하세요.' : '3DGS 파일을 열어 시작하세요.'); }
+  $('#eraser-panel').hidden = !state.eraser; $('#measure-idle').hidden = state.eraser || !!state.task; glHost.classList.toggle('erasing', !!state.eraser); updateEraserUI();
+}
+// 점군 표시에서 지운 가우시안 숨김 (정점 속성 vis)
+function updatePointsVis() {
+  const pts = state.points3; if (!pts) return; const a = pts.geometry.getAttribute('vis'); if (!a) return; const arr = a.array, cl = state.cloud, er = state.er;
+  if (!er || !er.count) arr.fill(1);
+  else { const mask = er.mask, src = cl.src; if (pts.userData.dense) { const K = pts.userData.K, ds = cl.denseStart; for (let c = 0; c < cl.n; c++) { const s0 = ds[c]; if (s0 < 0) continue; const v = mask[src[c]] ? 0 : 1; if (arr[s0] !== v) arr.fill(v, s0, s0 + K); } } else for (let c = 0; c < cl.n; c++) arr[c] = mask[src[c]] ? 0 : 1; }
+  a.needsUpdate = true;
+}
+function rebuildCenters() { const cl = state.cloud; if (!cl) return; const mask = state.er && state.er.count ? state.er.mask : null, src = cl.src; const step = Math.max(1, Math.ceil(cl.n / 200000)); const out = new Float32Array(Math.ceil(cl.n / step) * 3); let m = 0; for (let i = 0; i < cl.n; i += step) { if (mask && src && mask[src[i]]) continue; out[3 * m] = cl.pos[3 * i]; out[3 * m + 1] = cl.pos[3 * i + 1]; out[3 * m + 2] = cl.pos[3 * i + 2]; m++; } state.centers = out.subarray(0, m * 3); }
+// ---- 저장
+function canExactSave() { const h = state.header; if (!h || h.compressed || h.format !== 'binary_little_endian' || h.order[0] !== 'vertex' || !state.srcFile) return false; return h.elements.vertex.props.every((q) => q.type !== 'list' && PLY_TYPE_SIZE[q.type]); }
+// 원본 PLY 파일을 조각내어 다시 읽으며, 지운 행만 빼고 그대로 내보낸다 (원본 좌표·색·SH·헤더 주석 유지)
+async function* cleanedPlyChunks(onProgress) {
+  const h = state.header, file = state.srcFile, er = state.er, v = h.elements.vertex; const stride = v.props.reduce((s, q) => s + PLY_TYPE_SIZE[q.type], 0); const N = v.count, kept = N - er.count, mask = er.mask;
+  const hb = new Uint8Array(await file.slice(0, h.headerLength).arrayBuffer()); let text = ''; for (let i = 0; i < hb.length; i++) text += String.fromCharCode(hb[i]);
+  text = text.replace(/element vertex \d+/, () => `element vertex ${kept}`).replace(/(format [^\n]*\n)/, (m0) => `${m0}comment cleaned with 3DGS measurer eraser: removed ${er.count} of ${N} gaussians\n`);
+  const head = new Uint8Array(text.length); for (let i = 0; i < text.length; i++) head[i] = text.charCodeAt(i) & 255; yield head;
+  const ROWS = Math.max(1, Math.floor(32e6 / stride));
+  for (let r0 = 0; r0 < N; r0 += ROWS) { const r1 = Math.min(N, r0 + ROWS); const src = new Uint8Array(await file.slice(h.headerLength + r0 * stride, h.headerLength + r1 * stride).arrayBuffer()); if (src.length !== (r1 - r0) * stride) throw new Error('원본 파일 길이가 달라졌습니다');
+    let cnt = 0; for (let i = r0; i < r1; i++) if (!mask[i]) cnt++;
+    if (cnt === r1 - r0) yield src; else if (cnt) { const out = new Uint8Array(cnt * stride); let o = 0; for (let i = r0; i < r1;) { if (mask[i]) { i++; continue; } let j = i + 1; while (j < r1 && !mask[j]) j++; out.set(src.subarray((i - r0) * stride, (j - r0) * stride), o); o += (j - i) * stride; i = j; } yield out; }
+    if (onProgress) onProgress(r1 / N); }
+  const tail = h.headerLength + N * stride; if (tail < file.size) yield new Uint8Array(await file.slice(tail).arrayBuffer());
+}
+// 원본 그대로 저장할 수 없는 형식(SPZ·압축 PLY 등)용: 렌더러에 풀려 있는 값으로 3DGS PLY(SH 0차)를 만든다
+async function* splatsPlyChunks(onProgress) {
+  const sp = splatStore(), er = state.er, N = sp.numSplats, kept = N - er.count, mask = er.mask, off = state.coordOffset || [0, 0, 0];
+  const names = ['x', 'y', 'z', 'nx', 'ny', 'nz', 'f_dc_0', 'f_dc_1', 'f_dc_2', 'opacity', 'scale_0', 'scale_1', 'scale_2', 'rot_0', 'rot_1', 'rot_2', 'rot_3'];
+  const head = ['ply', 'format binary_little_endian 1.0', `comment cleaned with 3DGS measurer eraser: removed ${er.count} of ${N} gaussians (exported as SH degree 0)`, `element vertex ${kept}`, ...names.map((n) => `property float ${n}`), 'end_header'].join('\n') + '\n';
+  yield new TextEncoder().encode(head);
+  const ROWS = 400000; let buf = new Float32Array(Math.min(kept, ROWS) * 17), o = 0, done = 0; const chunks = [];
+  sp.forEachSplat((i, c, sc, q, op, col) => { if (mask[i]) return; const a = Math.min(1 - 1e-4, Math.max(1e-4, er.orig ? (er.kind === 'packed' ? er.orig[i] / 255 : op) : op));
+    buf[o] = c.x + off[0]; buf[o + 1] = c.y + off[1]; buf[o + 2] = c.z + off[2]; buf[o + 3] = buf[o + 4] = buf[o + 5] = 0; buf[o + 6] = (col.r - 0.5) / SH_C0; buf[o + 7] = (col.g - 0.5) / SH_C0; buf[o + 8] = (col.b - 0.5) / SH_C0; buf[o + 9] = Math.log(a / (1 - a));
+    buf[o + 10] = Math.log(Math.max(sc.x, 1e-9)); buf[o + 11] = Math.log(Math.max(sc.y, 1e-9)); buf[o + 12] = Math.log(Math.max(sc.z, 1e-9)); buf[o + 13] = q.w; buf[o + 14] = q.x; buf[o + 15] = q.y; buf[o + 16] = q.z; o += 17; done++;
+    if (o === buf.length) { chunks.push(new Uint8Array(buf.buffer)); buf = new Float32Array(Math.min(kept - done, ROWS) * 17); o = 0; } });
+  if (o > 0) chunks.push(new Uint8Array(buf.buffer, 0, o * 4));
+  for (let k = 0; k < chunks.length; k++) { yield chunks[k]; if (onProgress) onProgress((k + 1) / chunks.length); }
+}
+function upAxisAscii() { const u = camera.up; const m = { '1,0,0': 'x', '-1,0,0': '-x', '0,1,0': 'y', '0,-1,0': '-y', '0,0,1': 'z', '0,0,-1': '-z' }; return m[[u.x, u.y, u.z].map((q) => (Math.abs(q) < 1e-9 ? 0 : q)).join(',')] || null; }
+async function cleanedBlob(forceFallback, onProgress) { const parts = []; const gen = !forceFallback && canExactSave() ? cleanedPlyChunks : splatsPlyChunks; for await (const c of gen(onProgress)) parts.push(c); return new Blob(parts, { type: 'application/octet-stream' }); }
+async function saveCleaned(name, withSide) {
+  const er = state.er, exact = canExactSave(), gen = exact ? cleanedPlyChunks : splatsPlyChunks; const prog = (f) => { const el = $('#sv-progress'); if (el) el.textContent = `저장 중… ${(f * 100).toFixed(0)} %`; };
+  let handle = null;
+  if (window.showSaveFilePicker) { try { handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: '3DGS PLY', accept: { 'application/octet-stream': ['.ply'] } }] }); name = handle.name || name; } catch (e) { if (e && e.name === 'AbortError') return false; handle = null; } }
+  try {
+    if (handle) { const w = await handle.createWritable(); for await (const c of gen(prog)) await w.write(c); await w.close(); }
+    else { const parts = []; for await (const c of gen(prog)) parts.push(c); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(parts, { type: 'application/octet-stream' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); }
+  } catch (e) { console.error(e); showError('E17', `상세: ${String(e && e.message || e).slice(0, 160)}`); return false; }
+  if (withSide) download(`${name}.json`, JSON.stringify({ units: state.unit.factor === 1 ? 'm' : 'model', scale_to_meters: state.unit.factor, scale_sigma_rel: state.unit.sigmaRel || 0, transform: state.unit.transform || undefined, crs: state.unit.crs || undefined, up_axis: upAxisAscii() || undefined, unit_source: state.unit.source, cleaned_from: { name: state.file.name, size: state.file.size, removed: er.count, total: er.mask.length }, generated_by: '3DGS 다시점 거리 측정기 (지우개)', when: new Date().toISOString() }, null, 2), 'application/json');
+  er.savedAt = { len: er.undo.length, top: er.undo.length ? er.undo[er.undo.length - 1] : null }; er.saved = true; updateEraserUI(); updateCheckDot();
+  toast(`<b>저장 완료</b> ${name}<br>남은 가우시안 ${(er.mask.length - er.count).toLocaleString()}개 (지움 ${er.count.toLocaleString()}개)${exact ? '' : ' · SH 0차 PLY 로 변환 저장'}`, 'good', 8000); return true;
+}
+function openSaveCleaned() {
+  const er = state.er; if (!er || !er.count) { toast('지운 것이 없습니다. 먼저 지우개로 지울 부분을 문지르세요.', 'warn', 4000); return; }
+  const exact = canExactSave(), N = er.mask.length, name = `${state.file.name.replace(/\.[^.]+$/, '')}_cleaned.ply`; const side = state.unit.known && !/PLY 헤더/.test(state.unit.source);
+  openModal(`<h2>💾 지운 결과 저장</h2>
+  <div class="kv"><span>원본</span><b>${state.file.name} · 가우시안 ${N.toLocaleString()}개</b><span>지움</span><b>${er.count.toLocaleString()}개 (${(100 * er.count / N).toFixed(2)} %)</b><span>남음</span><b>${(N - er.count).toLocaleString()}개 · 약 ${((state.file.size * (N - er.count) / N) / 1e6).toFixed(1)} MB</b></div>
+  <p class="small">${exact ? '원본 PLY 에서 <b>지운 가우시안의 행만 빼고, 나머지는 한 바이트도 바꾸지 않고</b> 새 파일로 저장합니다(좌표·색·시점 의존 색(SH)·헤더 주석 그대로). <b>원본 파일은 바뀌지 않습니다.</b>' : '이 형식은 원본 그대로 저장할 수 없어 <b>3DGS PLY (SH 0차)</b>로 바꿔 저장합니다. 시점에 따라 변하는 색 성분은 빠지고 좌표 정밀도가 조금 낮아질 수 있습니다. 원본 파일은 바뀌지 않습니다.'}</p>
+  <div class="form-row"><label>파일 이름</label><input id="sv-name" type="text" value="${name}" style="flex:1;min-width:260px"></div>
+  ${side ? '<label class="field check"><input id="sv-side" type="checkbox" checked> 축척·좌표 정보(JSON)도 함께 저장 <span class="muted small">(새 파일은 이름이 달라 브라우저에 기억된 축척이 자동 적용되지 않습니다. 이 JSON 을 새 PLY 와 함께 놓으면 그대로 적용됩니다)</span></label>' : ''}
+  <div class="btnrow"><button class="btn primary" id="sv-go">💾 저장</button><button class="btn ghost" id="sv-cancel">취소</button></div><div id="sv-progress" class="muted small"></div>`);
+  $('#sv-cancel').onclick = closeModal;
+  $('#sv-go').onclick = async () => { let nm = ($('#sv-name').value || name).trim(); if (!/\.ply$/i.test(nm)) nm += '.ply'; const ws = !!($('#sv-side') && $('#sv-side').checked); $('#sv-go').disabled = true; const ok = await saveCleaned(nm, ws); if (ok) closeModal(); else if ($('#sv-go')) $('#sv-go').disabled = false; };
+}
+window.addEventListener('beforeunload', (e) => { if (state.er && state.er.count && !state.er.saved) { e.preventDefault(); e.returnValue = ''; } });
 function openChecklist() {
   const items = []; const it = (st, title, body, fix = '') => items.push({ st, title, body, fix });
   it(state.webgl2 ? 'ok' : 'bad', 'WebGL2', state.webgl2 ? '사용 가능' : ERRORS.E01.why, state.webgl2 ? '' : ERRORS.E01.fix);
@@ -982,7 +1225,7 @@ function openChecklist() {
   else { const f = state.file, h = state.header; it('ok', '파일', `${f.name} · ${(f.size / 1e6).toFixed(1)} MB · ${f.ext.toUpperCase()}${f.count ? ` · 가우시안 ${f.count.toLocaleString()}개` : ''}${h ? ` · SH ${h.shDegree}차${h.compressed ? ' · 압축 PLY' : ''}` : ''}`); if (h) it('ok', '3DGS 속성', h.compressed ? 'SuperSplat 압축 PLY (렌더러가 해석)' : `opacity · scale_0~2 · rot_0~3 확인`); else it('ok', '3DGS 속성', `${f.ext.toUpperCase()} 형식 — 렌더러(Spark)가 해석함`); }
   if (state.file) { if (state.unit.known) it('ok', '축척 (1 u → m)', `${state.unit.source} · 1 u = ${state.unit.factor.toPrecision(6)} m${state.unit.sigmaRel ? ` · 축척 상대 불확도 ≈ ${(state.unit.sigmaRel * 100).toFixed(1)} %` : ''}`); else it('warn', '축척 (1 u → m)', ERRORS.E05.why, ERRORS.E05.fix); if (state.coordOffset) it('ok', '좌표 원점 이동', `파일 좌표가 커서 뷰어 내부에서 (${state.coordOffset.join(', ')}) 를 뺐습니다. 표시·내보내기 좌표는 원래 값입니다.`); if (state.upEstimate) it(state.upEstimate.confident ? 'ok' : 'na', '위 방향 장면 분석', `추정 ${axisName(new THREE.Vector3(...state.upEstimate.axis))} · 평탄도 ${state.upEstimate.flat.toFixed(2)} (0.1 미만 = 평평) · 위쪽 쏠림 ${state.upEstimate.A.toFixed(2)} (|0.5| 초과 = 뚜렷) → ${state.upEstimate.confident ? '확실' : '불확실(사용 안 함)'}`); it(state.upSource ? 'ok' : 'warn', '위(上) 방향', state.upSource ? `${state.upSource}: ${$('#up-label').textContent}` : `정보 없음 → ${$('#up-label').textContent} 가정 (측정 정확도 무관)`, state.upSource ? '' : ERRORS.E06.fix); }
   if (state.task) { const n = state.rays.length, e = state.estimate; if (n < 2) it('bad', '진행 중 측정: 광선 수', `${n}개 — ${ERRORS.E07.why}`, ERRORS.E07.fix); else { it(e.maxAngleDeg >= 20 ? 'ok' : e.maxAngleDeg >= 10 ? 'warn' : 'bad', '진행 중 측정: 광선 각도', `최대 ${e.maxAngleDeg.toFixed(1)}° (20° 이상 권장)`, e.maxAngleDeg < 20 ? ERRORS.E08.fix : ''); it(e.pxRms <= 1.5 ? 'ok' : e.pxRms <= 4 ? 'warn' : 'bad', '진행 중 측정: 광선 잔차', `RMS ${e.pxRms.toFixed(1)} px · σ₀ ${fmtLen(e.sigma0)}`, e.pxRms > 4 ? ERRORS.E09.fix : ''); } }
-  if (state.cloud) it('ok', '점군', `가우시안 중심 ${state.cloud.n.toLocaleString()}점 · 보기 ${state.settings.viewMode} · 1클릭 방식 ${state.settings.pickMode === 'nearest' ? '가장 가까운 점' : '군집 중앙값'} · 원뿔 ${state.settings.pickRadius} px`); it(state.points.length ? 'ok' : 'na', '결과', `점 ${state.points.length}개 · 거리 ${state.dists.length}개${state.points.length && !state.unit.known ? ' · ⚠ 모두 모델 단위' : ''}`);
+  if (state.cloud) it('ok', '점군', `가우시안 중심 ${state.cloud.n.toLocaleString()}점 · 보기 ${state.settings.viewMode} · 1클릭 방식 ${state.settings.pickMode === 'nearest' ? '가장 가까운 점' : '군집 중앙값'} · 원뿔 ${state.settings.pickRadius} px`); if (state.er && state.er.count) it(state.er.saved ? 'ok' : 'warn', '지우개', `지운 가우시안 ${state.er.count.toLocaleString()} / ${state.er.mask.length.toLocaleString()} · ${state.er.saved ? '저장됨' : '저장 안 됨 — [🧽 지우개] → [💾 지운 결과 저장]'}`, state.er.saved ? '' : '지운 것은 화면에서만 숨겨진 상태입니다. 파일로 남기려면 저장하세요(원본은 바뀌지 않음).'); it(state.points.length ? 'ok' : 'na', '결과', `점 ${state.points.length}개 · 거리 ${state.dists.length}개${state.points.length && !state.unit.known ? ' · ⚠ 모두 모델 단위' : ''}`);
   openModal(`<h2>정보 점검</h2><p class="muted small">측정에 필요한 정보가 갖춰졌는지 확인합니다. 빨강은 진행 불가, 노랑은 결과에 제한이 있음을 뜻합니다.</p><ul class="checklist">${items.map((x) => `<li><span class="st ${x.st}">${{ ok: '✓', warn: '!', bad: '✕', na: '–' }[x.st]}</span><span class="body"><b>${x.title}</b>${x.body}${x.fix ? `<div class="fix">👉 ${x.fix}</div>` : ''}</span></li>`).join('')}</ul>`);
 }
 function openHelp() {
@@ -1131,6 +1374,12 @@ $('#banner-dismiss').onclick = () => { $('#banner').hidden = true; toast('모델
 $('#btn-point').onclick = () => (state.task?.kind === 'point' ? endTask() : startTask('point'));
 $('#btn-dist').onclick = () => (state.task?.kind === 'distance' ? endTask() : startTask('distance'));
 $('#btn-home').onclick = frameAll;
+$('#btn-eraser').onclick = () => setEraser(!state.eraser); $('#er-exit').onclick = () => setEraser(false); $('#er-undo').onclick = erUndo; $('#er-redo').onclick = erRedo; $('#er-mini-undo').onclick = erUndo; $('#er-mini-redo').onclick = erRedo; $('#er-hist').onclick = (e) => { const li = e.target.closest('li[data-pos]'); if (li) erJump(+li.dataset.pos); }; $('#er-reset').onclick = erRestoreAll; $('#er-save').onclick = openSaveCleaned;
+$('#er-size').oninput = (e) => setSetting('erSize', +e.target.value); $('#er-big').oninput = (e) => { state.settings.erMode = 'big'; setSetting('erBig', +e.target.value); }; $('#er-layers').oninput = (e) => { state.settings.erMode = 'multi'; setSetting('erLayers', +e.target.value); }; $$('input[name=ermode]').forEach((r) => (r.onchange = (e) => setSetting('erMode', e.target.value)));
+document.addEventListener('pointerdown', (e) => { if (!state.eraser || e.button !== 0 || e.target !== renderer?.domElement) return; const r = renderer.domElement.getBoundingClientRect(); erDown(e.clientX - r.left, e.clientY - r.top); try { renderer.domElement.setPointerCapture(e.pointerId); } catch (_) {} });
+document.addEventListener('pointermove', (e) => { if (state.eraser && state.er && state.er.down) { const r = renderer.domElement.getBoundingClientRect(); state.er.pending = { x: e.clientX - r.left, y: e.clientY - r.top }; } });
+document.addEventListener('pointerup', (e) => { if (state.er && state.er.down && e.button === 0) erUp(); });
+document.addEventListener('pointercancel', () => { if (state.er && state.er.down) erUp(); }); window.addEventListener('blur', () => { if (state.er && state.er.down) erUp(); });
 $('#btn-up').onclick = (e) => { e.stopPropagation(); $('#btn-up').parentElement.classList.toggle('open'); };
 document.addEventListener('click', () => $('#btn-up').parentElement.classList.remove('open'));
 $$('#menu-up button[data-up]').forEach((b) => (b.onclick = () => setUp(new THREE.Vector3(...b.dataset.up.split(',').map(Number)), '사용자 선택'))); $('#up-flip').onclick = flipUp; $('#nav-flip').onclick = flipUp;
@@ -1160,7 +1409,7 @@ function setSetting(key, val) { state.settings[key] = val; syncSettingsUI(); sav
 function syncSettingsUI() {
   const st = state.settings;
   $('#set-n').value = st.n; $('#set-snap').checked = st.snap; $('#set-refine').checked = st.refine; $('#set-loupe').checked = st.loupe; $('#set-labels').checked = st.labels; st.zoom = Math.max(2, Math.min(5, Math.round(st.zoom * 2) / 2)); $('#set-zoom').value = st.zoom; $('#zoom-label').textContent = `${st.zoom}×`; $('#live-zoom').value = String(st.zoom); $('#set-dunit').value = st.dunit;
-  $('#set-hires').checked = st.loupeHiRes; $('#set-autorot').checked = st.autoRotate;
+  $('#set-hires').checked = st.loupeHiRes; $('#set-autorot').checked = st.autoRotate; updateEraserUI();
   $('#set-navpad').checked = st.navpad; $('#set-navstep').value = st.navStep;
   $('#set-ptsize').value = st.ptSize; $('#ptsize-label').textContent = `${st.ptSize} px`; $('#set-ptmode').value = st.ptMode; $('#q-ptmode').value = st.ptMode; $$('#set-densify, #q-densify').forEach((el) => (el.value = String(st.densify))); $('#q-ptpx').value = st.ptSize; $('#q-ptpx-label').textContent = `${st.ptSize} px`; $('#row-dense-q').hidden = st.ptMode !== 'dense'; $('#row-gauss-q').hidden = st.ptMode !== 'gauss'; $('#row-gauss-q2').hidden = st.ptMode !== 'gauss'; $('#row-px-q').hidden = st.ptMode === 'gauss'; updateDenseLabel(); $('#set-hidebig').checked = st.hideBig; $('#set-ptscale').value = st.ptScale; $('#q-ptscale').value = st.ptScale; $$('#set-ptmax, #q-ptmax').forEach((el) => (el.value = st.ptMaxPx)); $$('#ptmax-label, #q-ptmax-label').forEach((el) => (el.textContent = `${st.ptMaxPx} px`)); $('#q-ptscale-label').textContent = `${st.ptScale}×`; $('#cloud-quick').hidden = !(st.viewMode !== 'splat' && state.points3); $('#ptscale-label').textContent = `${st.ptScale}×`; $('#row-ptsize').style.opacity = st.ptMode === 'gauss' ? '.55' : '1'; $('#row-ptscale').style.opacity = st.ptMode === 'gauss' ? '1' : '.55'; $('#set-cloudcolor').value = st.cloudColor; $('#set-pick-splat').checked = st.pickSplat; $$('input[name=pickmode]').forEach((r) => (r.checked = r.value === st.pickMode)); $('#opt-cluster').classList.toggle('on', st.pickMode === 'cluster'); $('#opt-nearest').classList.toggle('on', st.pickMode === 'nearest'); $('#set-pickr').value = st.pickRadius; $('#pickr-label').textContent = `${st.pickRadius} px`; $('#navpad').hidden = !(st.navpad && state.mesh); $('#btn-navpad').classList.toggle('active', st.navpad);
   $$('#live-loupe-size button, #set-loupe-size button').forEach((b) => b.classList.toggle('on', b.dataset.ls === st.loupeSize));
@@ -1186,7 +1435,7 @@ document.addEventListener('pointerup', () => { state.dragging = false; }, true);
 document.addEventListener('pointerup', (e) => { if (!down || e.button !== 0) return; const mv = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (mv < 5 && state.task && e.target === renderer.domElement) { const r = renderer.domElement.getBoundingClientRect(); state.forceRay = e.shiftKey; onMeasureClick(e.clientX - r.left, e.clientY - r.top); state.forceRay = false; } });
 document.addEventListener('pointermove', (e) => { if (!renderer) return; const r = renderer.domElement.getBoundingClientRect(); state.mouse.x = e.clientX - r.left; state.mouse.y = e.clientY - r.top; state.mouse.inside = e.target === renderer.domElement; });
 // 키
-document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if (k === 'u' && state.mesh) { flipUp(); return; } if (e.key === 'Tab' && state.mesh) { e.preventDefault(); setSetting('viewMode', state.settings.viewMode === 'splat' ? 'cloud' : 'splat'); applyViewMode(); toast(`보기: <b>${state.settings.viewMode === 'cloud' ? '점군 — 클릭 한 번으로 점 선택(직접선택)' : '스플랫 — 다시점 클릭 측정'}</b>`, 'info', 2500); return; } if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (k === 'a' && !e.ctrlKey && !e.metaKey) $$('#menu-analyze button')[0].click(); else if (k === 'l') $$('#menu-analyze button')[1].click(); else if (k === 'p') $$('#menu-analyze button')[2].click(); else if (e.key === 'Enter') { if (state.task && GEOM_NEED[state.task.kind] && state.rays.length === 0) finishGeometry(); else finishPoint(); } else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if ((e.key === '-' || e.key === '=' || e.key === '+') && state.points3 && state.settings.viewMode !== 'splat') { const d = e.key === '-' ? -1 : 1; if (state.settings.ptMode === 'gauss') { setSetting('ptMaxPx', Math.max(1, Math.min(24, state.settings.ptMaxPx + d))); toast(`점군 최대 점 크기 ${state.settings.ptMaxPx} px`, 'info', 1200); } else { setSetting('ptSize', Math.max(0.5, Math.min(6, +(state.settings.ptSize + 0.5 * d).toFixed(1)))); toast(`점군 점 크기 ${state.settings.ptSize} px`, 'info', 1200); } } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(5, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
+document.addEventListener('keydown', (e) => { if (e.target.matches('input,select,textarea')) return; if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; } const k = e.key.toLowerCase(); if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y') && state.er && (state.eraser || (!state.task && (state.er.undo.length || state.er.redo.length)))) { e.preventDefault(); if (k === 'y' || e.shiftKey) erRedo(); else erUndo(); return; } if (state.eraser) { const mod = e.ctrlKey || e.metaKey; if (mod && k === 's') { e.preventDefault(); openSaveCleaned(); return; } if (e.key === '[' || e.key === ']') { setSetting('erSize', Math.max(5, Math.min(150, state.settings.erSize + (e.key === ']' ? 5 : -5)))); return; } if (e.key === 'Escape') { setEraser(false); return; } if (!mod && !e.altKey && /^[0-9]$/.test(e.key)) { const d = +e.key; if (d >= 2) state.settings.erLayers = d; setSetting('erMode', d === 0 ? 'all' : d === 1 ? 'front' : 'multi'); toast(`지우는 깊이: <strong>${erModeName()}</strong>`, 'info', 1500).classList.add('passive'); return; } if (!mod && k === 'b') { setSetting('erMode', 'big'); toast(`지우는 깊이: <strong>${erModeName()}</strong>`, 'info', 1500).classList.add('passive'); return; } } if (k === 'e' && state.mesh && !e.ctrlKey && !e.metaKey) { setEraser(!state.eraser); return; } if (k === 'u' && state.mesh) { flipUp(); return; } if (e.key === 'Tab' && state.mesh) { e.preventDefault(); setSetting('viewMode', state.settings.viewMode === 'splat' ? 'cloud' : 'splat'); applyViewMode(); toast(`보기: <b>${state.settings.viewMode === 'cloud' ? '점군 — 클릭 한 번으로 점 선택(직접선택)' : '스플랫 — 다시점 클릭 측정'}</b>`, 'info', 2500); return; } if (k === 'm') $('#btn-point').click(); else if (k === 'd') $('#btn-dist').click(); else if (k === 'r') autoRotate(); else if (k === 'h') frameAll(); else if (k === 'f') { const rp = refPoint(); if (rp) moveTarget(rp); } else if (k === 'a' && !e.ctrlKey && !e.metaKey) $$('#menu-analyze button')[0].click(); else if (k === 'l') $$('#menu-analyze button')[1].click(); else if (k === 'p') $$('#menu-analyze button')[2].click(); else if (e.key === 'Enter') { if (state.task && GEOM_NEED[state.task.kind] && state.rays.length === 0) finishGeometry(); else finishPoint(); } else if (e.key === 'Escape') $('#btn-cancel').click(); else if (e.key === 'Backspace') { e.preventDefault(); undoRay(); } else if (e.key === '?') openHelp(); else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && state.task && state.rays.length) { e.preventDefault(); const st = autoStepDeg(); if (e.key === 'ArrowRight') autoOrbit(st, 'h'); else if (e.key === 'ArrowLeft') autoOrbit(-st, 'h'); else if (e.key === 'ArrowUp') autoOrbit(Math.min(st, 45), 'v'); else autoOrbit(-Math.min(st, 45), 'v'); } else if ((e.key === '-' || e.key === '=' || e.key === '+') && state.points3 && state.settings.viewMode !== 'splat') { const d = e.key === '-' ? -1 : 1; if (state.settings.ptMode === 'gauss') { setSetting('ptMaxPx', Math.max(1, Math.min(24, state.settings.ptMaxPx + d))); toast(`점군 최대 점 크기 ${state.settings.ptMaxPx} px`, 'info', 1200); } else { setSetting('ptSize', Math.max(0.5, Math.min(6, +(state.settings.ptSize + 0.5 * d).toFixed(1)))); toast(`점군 점 크기 ${state.settings.ptSize} px`, 'info', 1200); } } else if (e.key === '[' || e.key === ']') setSetting('zoom', Math.max(2, Math.min(5, state.settings.zoom + (e.key === ']' ? 0.5 : -0.5)))); });
 function resetAll(keepFile) { state.points = []; state.dists = []; state.geoms = []; state.selected.clear(); state.nextId = 1; state.task = null; cancelPoint(false); $$('#btn-point,#btn-dist').forEach((b) => b.classList.remove('active')); $('#measure-idle').hidden = false; $('#measure-live').hidden = true; renderResults(); }
 function runTour() { document.getElementById('app').classList.add('tour-active'); startTour(TOUR_STEPS, { onDone: () => { document.getElementById('app').classList.remove('tour-active'); try { localStorage.setItem('gsm.tourSeen', '1'); } catch (_) {} } }); }
 
@@ -1205,7 +1454,7 @@ window.__app = {
   setCamera(pos, target, up) { if (up) camera.up.set(...up); camera.position.set(...pos); controls.target.set(...target); controls.update(); renderer.render(scene, camera); },
   project(p) { return project(new THREE.Vector3(...p)); },
   click(px, py) { onMeasureClick(px, py); },
-  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, flipUp, estimateUpFromData, checkPole, setUpAxis(v) { setUp(new THREE.Vector3(...v), 'test'); }, navAction, directPick, rebuildPoints, addPickedPoint, applyViewMode, startRefine, geomInfo, addGeom, distanceDecomp, finishGeometry, taskPointAdded, propagate, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
+  startTask, finishPoint, endTask, frameAll, autoRotate, autoOrbit, origCoord, setEraser, eraseAt, erUndo, erRedo, erRestoreAll, erJump, cleanedBlob, canExactSave, openSaveCleaned, eraseStroke(pts) { erDown(pts[0][0], pts[0][1]); eraseTick(); for (let q = 1; q < pts.length; q++) { state.er.pending = { x: pts[q][0], y: pts[q][1] }; eraseTick(); } erUp(); return state.er.count; }, flipUp, estimateUpFromData, checkPole, setUpAxis(v) { setUp(new THREE.Vector3(...v), 'test'); }, navAction, directPick, rebuildPoints, addPickedPoint, applyViewMode, startRefine, geomInfo, addGeom, distanceDecomp, finishGeometry, taskPointAdded, propagate, navOrbit, navPan, navZoom, similarityFromPairs, toReal, get animating() { return anims.length > 0; },
   debugAddPoint(xyz, name) { const p = { id: state.nextId++, name: name || `P${state.nextId - 1}`, p: new THREE.Vector3(...xyz), sigma0: 1e-4, cov: new THREE.Matrix3().identity().multiplyScalar(1e-8), n: 5, quality: 'good', pxRms: 0.1, maxAngleDeg: 60, rays: [] }; state.points.push(p); renderResults(); return p; },
   openGcpCalib, setGcp(name, xyz) { state.gcpInputs[name] = { x: xyz[0], y: xyz[1], z: xyz[2] }; }, openChecklist, openCalibWizard, applyManualScale(s) { state.unit = { known: true, factor: s, sigmaRel: 0, source: 'test' }; applyUnitUI(); },
   distanceInfo, intersectRays, render() { renderer.render(scene, camera); drawOverlay(); },

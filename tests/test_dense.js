@@ -8,9 +8,10 @@ const puppeteer = require('puppeteer-core'); const fs = require('fs'); const pat
   const frame = () => p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const buf = fs.readFileSync(path.join(__dirname, 'cube_m.ply'));
   await p.evaluate(async (b64) => { const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); await window.__app.loadArrayBuffer('cube_m.ply', u8.buffer); }, buf.toString('base64')); await sleep(500);
+  await p.keyboard.press('Tab'); await sleep(500); // 조밀 표본은 점군 보기를 처음 켤 때 만들어지므로(2026-10-03 변경) 점군으로 바꾼 뒤에 확인
   const info = await p.evaluate(() => ({ mode: window.__state.settings.ptMode, dense: window.__state.denseInfo, n: window.__state.cloud.n, label: document.querySelector('#q-dense-info').textContent, ptSize: window.__state.settings.ptSize }));
   console.log('정육면체:', JSON.stringify(info));
-  await p.keyboard.press('Tab'); await p.evaluate(() => window.__app.setCamera([5.5, 5.0, 4.0], [1, 1, 1], [0, 0, 1])); await frame(); await frame();
+  await p.evaluate(() => window.__app.setCamera([5.5, 5.0, 4.0], [1, 1, 1], [0, 0, 1])); await frame(); await frame();
   const lit = async () => p.evaluate(() => { const g = document.querySelector('#gl canvas'); window.__app.render(); const c = document.createElement('canvas'); c.width = g.width; c.height = g.height; const x = c.getContext('2d'); x.drawImage(g, 0, 0); const d = x.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) n++; return +(100 * n / (d.length / 4)).toFixed(1); });
   const litDense = await lit(); await p.screenshot({ path: 'shots/36_dense_cube.png' });
   // 근접 시 점이 작은지: 꼭짓점 0.3 m 앞 → 마커 주변 노란 영역 폭

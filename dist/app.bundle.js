@@ -56702,6 +56702,12 @@ void main() {
       title: "\uC704\xB7\uC544\uB798\uB85C \uB354 \uB3CC\uC544\uAC00\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4 (\uD68C\uC804 \uD55C\uACC4)",
       why: '\uD654\uBA74 \uD68C\uC804\uC740 "\uC704 \uBC29\uD5A5" \uCD95\uC744 \uAE30\uC900\uC73C\uB85C \uD558\uBA70, \uBC14\uB85C \uC704(\uCC9C\uC815)\uB098 \uBC14\uB85C \uC544\uB798\uB97C \uB118\uC5B4\uAC08 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4. \uC704 \uBC29\uD5A5\uC774 \uC2E4\uC81C\uC640 \uBC18\uB300\uB85C \uC7A1\uD600 \uC788\uC73C\uBA74 \uB4A4\uC9D1\uD78C \uD654\uBA74\uC744 \uB4DC\uB798\uADF8\uB85C \uBC14\uB85C \uC138\uC6B8 \uC218 \uC5C6\uC5B4 \uD68C\uC804\uC774 \uBA48\uCD98 \uAC83\uCC98\uB7FC \uBCF4\uC785\uB2C8\uB2E4.',
       fix: "\uD654\uBA74\uC774 \uB4A4\uC9D1\uD600 \uBCF4\uC774\uBA74 [\u21C5 \uC704\uC544\uB798 \uB4A4\uC9D1\uAE30](U \uD0A4, \uC870\uC791 \uD328\uB110 \uC81C\uBAA9\uC904\uC758 \u21C5). \uC7A5\uBA74\uC774 \uC606\uC73C\uB85C \uB204\uC6CC \uC788\uC73C\uBA74 [\u2912 \uC704 \uBC29\uD5A5] \uBA54\uB274\uC5D0\uC11C \uCD95\uC744 \uACE0\uB974\uC138\uC694."
+    },
+    E17: {
+      level: "block",
+      title: "\uC9C0\uC6B4 \uACB0\uACFC\uB97C \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4",
+      why: "\uC800\uC7A5\uC740 \uC6D0\uBCF8 \uD30C\uC77C\uC744 \uB2E4\uC2DC \uC77D\uC5B4 \uC9C0\uC6B4 \uAC00\uC6B0\uC2DC\uC548\uB9CC \uBE7C\uACE0 \uC0C8 \uD30C\uC77C\uC744 \uB9CC\uB4DC\uB294 \uBC29\uC2DD\uC785\uB2C8\uB2E4. \uC6D0\uBCF8 \uD30C\uC77C\uC744 \uC62E\uAE30\uAC70\uB098 \uC9C0\uC6B0\uAC70\uB098 \uC218\uC815\uD588\uC73C\uBA74 \uB2E4\uC2DC \uC77D\uC744 \uC218 \uC5C6\uACE0, \uC800\uC7A5 \uACF5\uAC04\xB7\uBA54\uBAA8\uB9AC\uAC00 \uBD80\uC871\uD574\uB3C4 \uC2E4\uD328\uD569\uB2C8\uB2E4.",
+      fix: "\uC6D0\uBCF8 \uD30C\uC77C\uC774 \uCC98\uC74C \uC5F4\uC5C8\uB358 \uC790\uB9AC\uC5D0 \uADF8\uB300\uB85C \uC788\uB294\uC9C0 \uD655\uC778\uD558\uACE0 \uB2E4\uC2DC \uC800\uC7A5\uD558\uC138\uC694. \uCC3D\uC744 \uB2EB\uC9C0 \uC54A\uC558\uB2E4\uBA74 \uC9C0\uC6B4 \uB0B4\uC6A9\uC740 \uADF8\uB300\uB85C \uB0A8\uC544 \uC788\uC2B5\uB2C8\uB2E4. \uD30C\uC77C\uC774 \uB9E4\uC6B0 \uD06C\uBA74 \uC800\uC7A5 \uC704\uCE58\uC758 \uC5EC\uC720 \uACF5\uAC04\uB3C4 \uD655\uC778\uD558\uC138\uC694."
     }
   };
   var QUALITY = {
@@ -56750,7 +56756,7 @@ void main() {
     {
       target: null,
       title: "3DGS \uB2E4\uC2DC\uC810 \uAC70\uB9AC \uCE21\uC815\uAE30\uC5D0 \uC624\uC2E0 \uAC83\uC744 \uD658\uC601\uD569\uB2C8\uB2E4",
-      body: "3D \uC0AC\uC9C4(3DGS) \uC18D \uB450 \uC810 \uC0AC\uC774\uAC00 \uC2E4\uC81C\uB85C \uBA87 \uBBF8\uD130\uC778\uC9C0 \uC7AC\uB294 \uB3C4\uAD6C\uC785\uB2C8\uB2E4. \uC124\uCE58\xB7\uBCC0\uD658 \uC5C6\uC774 \uBE0C\uB77C\uC6B0\uC800\uC5D0\uC11C \uD30C\uC77C\uC744 \uC5F4\uBA74 \uBC14\uB85C \uC2DC\uC791\uB429\uB2C8\uB2E4. 6\uB2E8\uACC4\uB85C \uAE30\uB2A5\uC744 \uC18C\uAC1C\uD569\uB2C8\uB2E4. (\uC57D 1\uBD84)",
+      body: "3D \uC0AC\uC9C4(3DGS) \uC18D \uB450 \uC810 \uC0AC\uC774\uAC00 \uC2E4\uC81C\uB85C \uBA87 \uBBF8\uD130\uC778\uC9C0 \uC7AC\uB294 \uB3C4\uAD6C\uC785\uB2C8\uB2E4. \uC124\uCE58\xB7\uBCC0\uD658 \uC5C6\uC774 \uBE0C\uB77C\uC6B0\uC800\uC5D0\uC11C \uD30C\uC77C\uC744 \uC5F4\uBA74 \uBC14\uB85C \uC2DC\uC791\uB429\uB2C8\uB2E4. 7\uB2E8\uACC4\uB85C \uAE30\uB2A5\uC744 \uC18C\uAC1C\uD569\uB2C8\uB2E4. (\uC57D 1\uBD84)",
       illus: ILLUS_RAYS
     },
     {
@@ -56781,8 +56787,13 @@ void main() {
       body: '\uD30C\uC77C\uC5D0 "1 \uB2E8\uC704 = \uBA87 m" \uC815\uBCF4\uAC00 \uC5C6\uC73C\uBA74 \uAC70\uB9AC\uB294 \uBAA8\uB378 \uB2E8\uC704(u)\uB85C\uB9CC \uD45C\uC2DC\uB418\uACE0, \uC0C1\uB2E8 \uBC30\uB108\uAC00 \uC774\uC720\uC640 \uD574\uACB0 \uBC29\uBC95\uC744 \uC54C\uB824 \uC90D\uB2C8\uB2E4. A4 \uC6A9\uC9C0\uB098 \uC90C\uC790\uB85C \uC7B0 \uAE38\uC774 \uD558\uB098\uB85C [\uCD95\uCC99 \uBCF4\uC815]\uC744 \uD558\uBA74 \uC774\uD6C4 \uBAA8\uB4E0 \uAC70\uB9AC\uAC00 \uBBF8\uD130\uB85C \uBC14\uB01D\uB2C8\uB2E4.'
     },
     {
+      target: "#btn-eraser",
+      title: "\u2465 \uC9C0\uC6B0\uAC1C \u2014 \uC7A1\uD2F0\uB97C \uC9C0\uC6B0\uACE0 \uC800\uC7A5",
+      body: "\uACF5\uC911\uC5D0 \uB72C \uC5BC\uB8E9\uC774\uB098 \uD544\uC694 \uC5C6\uB294 \uBD80\uBD84\uC744 <b>\uC67C\uCABD \uB4DC\uB798\uADF8\uB85C \uBB38\uC9C8\uB7EC</b> \uC9C0\uC6C1\uB2C8\uB2E4(\uD0A4 E). \uAC89\uCE35\uB9CC / \uC5EC\uB7EC \uCE35 / \uD070 \uC7A1\uD2F0\uB9CC / \uC804\uBD80 \uC911\uC5D0\uC11C \uAE4A\uC774\uB97C \uACE0\uB97C \uC218 \uC788\uACE0, \uC798\uBABB \uC9C0\uC6B0\uBA74 Ctrl+Z \uB85C \uB418\uB3CC\uB9AC\uACE0 Ctrl+Y \uB85C \uB2E4\uC2DC \uC2E4\uD589\uD569\uB2C8\uB2E4(\uC791\uC5C5 \uAE30\uB85D\uC5D0\uC11C \uC6D0\uD558\uB294 \uB2E8\uACC4\uB85C \uD55C \uBC88\uC5D0 \uC774\uB3D9\uB3C4 \uAC00\uB2A5). [\uC9C0\uC6B4 \uACB0\uACFC \uC800\uC7A5]\uC740 \uC0C8 \uD30C\uC77C\uC744 \uB9CC\uB4E4\uBA70 \uC6D0\uBCF8\uC740 \uBC14\uB00C\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4."
+    },
+    {
       target: "#btn-check",
-      title: "\u2465 \uC815\uBCF4 \uC810\uAC80 \xB7 \uB0B4\uBCF4\uB0B4\uAE30",
+      title: "\u2466 \uC815\uBCF4 \uC810\uAC80 \xB7 \uB0B4\uBCF4\uB0B4\uAE30",
       body: "[\uC815\uBCF4 \uC810\uAC80]\uC740 \uD30C\uC77C \uD615\uC2DD\xB7\uCD95\uCC99\xB7\uAD11\uC120 \uC218\xB7\uAC01\uB3C4 \uB4F1 \uCE21\uC815\uC5D0 \uD544\uC694\uD55C \uC815\uBCF4\uAC00 \uCDA9\uBD84\uD55C\uC9C0 \uD45C\uB85C \uBCF4\uC5EC \uC90D\uB2C8\uB2E4. [\uB0B4\uBCF4\uB0B4\uAE30]\uB85C CSV / JSON / PNG\uB97C \uC800\uC7A5\uD569\uB2C8\uB2E4. \uC900\uBE44\uB418\uC168\uC73C\uBA74 \uD30C\uC77C\uC744 \uC5F4\uC5B4 \uBCF4\uC138\uC694!"
     }
   ];
@@ -56875,6 +56886,9 @@ void main() {
     coordOffset: null,
     cloud: null,
     points3: null,
+    srcFile: null,
+    er: null,
+    eraser: false,
     unit: { known: false, factor: 1, sigmaRel: 0, source: "" },
     upSource: null,
     task: null,
@@ -56889,7 +56903,7 @@ void main() {
     selected: /* @__PURE__ */ new Set(),
     nextId: 1,
     nextGeomId: 1,
-    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 1, ptMode: "dense", ptScale: 0.7, ptMaxPx: 6, hideBig: true, densify: "auto", cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, dunit: "auto", labels: true },
+    settings: { n: 5, snap: true, refine: true, loupe: true, zoom: 2, loupeSize: "m", loupeHiRes: true, autoRotate: true, rotAxis: "screen", rotPattern: "right", rotStep: 0, navpad: true, navStep: 15, viewMode: "splat", ptSize: 1, ptMode: "dense", ptScale: 0.7, ptMaxPx: 6, hideBig: true, densify: "auto", cloudColor: "rgb", pickSplat: false, pickMode: "cluster", pickRadius: 8, pickHelpSeen: false, erSize: 30, erMode: "front", erLayers: 3, erBig: 3, dunit: "auto", labels: true },
     autoPivot: null,
     autoAngleDeg: 0,
     autoTiltDeg: 0,
@@ -56983,6 +56997,7 @@ void main() {
   function loop() {
     requestAnimationFrame(loop);
     tickAnimations();
+    if (state.eraser && state.er && (state.er.down || state.er.flushPending)) eraseTick();
     controls.update();
     checkPole();
     if (state.bounds) updateClipPlanes();
@@ -57821,32 +57836,42 @@ void main() {
     if (!h || h.compressed || h.format !== "binary_little_endian" || h.order[0] !== "vertex") return null;
     const v = h.elements.vertex;
     if (v.props.some((q) => q.type !== "float" && q.type !== "float32")) return null;
-    const k = v.props.length, ix = h.names.indexOf("x"), ir = h.names.indexOf("f_dc_0"), io = h.names.indexOf("opacity"), is0 = h.names.indexOf("scale_0");
+    const k = v.props.length, ix = h.names.indexOf("x"), ir = h.names.indexOf("f_dc_0"), io = h.names.indexOf("opacity"), is0 = h.names.indexOf("scale_0"), has2 = h.names.includes("scale_2");
     if (ix < 0) return null;
     const aligned = h.headerLength % 4 === 0;
     const f32 = aligned ? new Float32Array(buf, h.headerLength, v.count * k) : new Float32Array(buf.slice(h.headerLength, h.headerLength + v.count * k * 4));
-    const iq = h.names.indexOf("rot_0");
-    const pos = new Float32Array(v.count * 3), col = new Uint8Array(v.count * 3), rad = new Float32Array(v.count), scl = new Float32Array(v.count * 3), quat = new Float32Array(v.count * 4);
+    const N = v.count, iq = h.names.indexOf("rot_0");
+    const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N), scl = new Float32Array(N * 3), quat = new Float32Array(N * 4), src = new Uint32Array(N);
+    const aPos = new Float32Array(N * 3), aAlpha = new Uint8Array(N), aRad = new Float32Array(N);
     let n = 0;
-    for (let i = 0; i < v.count; i++) {
+    for (let i = 0; i < N; i++) {
       const b = i * k;
-      if (io >= 0 && 1 / (1 + Math.exp(-f32[b + io])) < 0.05) continue;
-      pos[3 * n] = f32[b + ix];
-      pos[3 * n + 1] = f32[b + ix + 1];
-      pos[3 * n + 2] = f32[b + ix + 2];
+      const op = io >= 0 ? 1 / (1 + Math.exp(-f32[b + io])) : 1;
+      const x = f32[b + ix], y = f32[b + ix + 1], z = f32[b + ix + 2];
+      let a = 0, b22 = 0, c2 = 0, r = 0;
+      if (is0 >= 0) {
+        a = Math.exp(f32[b + is0]);
+        b22 = Math.exp(f32[b + is0 + 1]);
+        c2 = has2 ? Math.exp(f32[b + is0 + 2]) : Math.min(a, b22);
+        const mn = Math.min(a, b22, c2);
+        r = mn > 0 ? Math.sqrt(a * b22 * c2 / mn) : 0;
+      }
+      aPos[3 * i] = x;
+      aPos[3 * i + 1] = y;
+      aPos[3 * i + 2] = z;
+      aAlpha[i] = Math.round(op * 255);
+      aRad[i] = r;
+      if (op < 0.05) continue;
+      pos[3 * n] = x;
+      pos[3 * n + 1] = y;
+      pos[3 * n + 2] = z;
+      src[n] = i;
       if (ir >= 0) for (let c = 0; c < 3; c++) col[3 * n + c] = Math.max(0, Math.min(255, Math.round((0.5 + SH_C0 * f32[b + ir + c]) * 255)));
       else col[3 * n] = col[3 * n + 1] = col[3 * n + 2] = 200;
-      if (is0 >= 0) {
-        const a = Math.exp(f32[b + is0]), b22 = Math.exp(f32[b + is0 + 1]), c2 = h.names.includes("scale_2") ? Math.exp(f32[b + is0 + 2]) : Math.min(a, b22);
-        const srt = [a, b22, c2].sort((x, y) => y - x);
-        rad[n] = Math.sqrt(srt[0] * srt[1]);
-        scl[3 * n] = a;
-        scl[3 * n + 1] = b22;
-        scl[3 * n + 2] = c2;
-      } else {
-        rad[n] = 0;
-        scl[3 * n] = scl[3 * n + 1] = scl[3 * n + 2] = 0;
-      }
+      rad[n] = r;
+      scl[3 * n] = a;
+      scl[3 * n + 1] = b22;
+      scl[3 * n + 2] = c2;
       if (iq >= 0) {
         const qw = f32[b + iq], qx = f32[b + iq + 1], qy = f32[b + iq + 2], qz = f32[b + iq + 3];
         const L = Math.hypot(qw, qx, qy, qz) || 1;
@@ -57859,16 +57884,23 @@ void main() {
       }
       n++;
     }
-    return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), n };
+    return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), src: src.subarray(0, n), n, all: { pos: aPos, alpha: aAlpha, rad: aRad, n: N } };
   }
   function buildCloudFromMesh(mesh) {
     try {
-      const src = mesh.splats || mesh.packedSplats;
-      const N = src?.numSplats || 0;
-      if (!N || !src.forEachSplat) return null;
-      const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N), scl = new Float32Array(N * 3), quat = new Float32Array(N * 4);
+      const sp = mesh.splats || mesh.packedSplats;
+      const N = sp?.numSplats || 0;
+      if (!N || !sp.forEachSplat) return null;
+      const pos = new Float32Array(N * 3), col = new Uint8Array(N * 3), rad = new Float32Array(N), scl = new Float32Array(N * 3), quat = new Float32Array(N * 4), src = new Uint32Array(N), aPos = new Float32Array(N * 3), aAlpha = new Uint8Array(N), aRad = new Float32Array(N);
       let n = 0;
-      src.forEachSplat((i, c, sc, q, op, color) => {
+      sp.forEachSplat((i, c, sc, q, op, color) => {
+        const mn = Math.min(sc.x, sc.y, sc.z);
+        const r = mn > 0 ? Math.sqrt(sc.x * sc.y * sc.z / mn) : 0;
+        aPos[3 * i] = c.x;
+        aPos[3 * i + 1] = c.y;
+        aPos[3 * i + 2] = c.z;
+        aAlpha[i] = Math.round(Math.max(0, Math.min(1, op)) * 255);
+        aRad[i] = r;
         if (op < 0.05) return;
         pos[3 * n] = c.x;
         pos[3 * n + 1] = c.y;
@@ -57876,8 +57908,7 @@ void main() {
         col[3 * n] = Math.round(color.r * 255);
         col[3 * n + 1] = Math.round(color.g * 255);
         col[3 * n + 2] = Math.round(color.b * 255);
-        const srt = [sc.x, sc.y, sc.z].sort((x, y) => y - x);
-        rad[n] = Math.sqrt(srt[0] * srt[1]);
+        rad[n] = r;
         scl[3 * n] = sc.x;
         scl[3 * n + 1] = sc.y;
         scl[3 * n + 2] = sc.z;
@@ -57885,9 +57916,10 @@ void main() {
         quat[4 * n + 1] = q.x;
         quat[4 * n + 2] = q.y;
         quat[4 * n + 3] = q.z;
+        src[n] = i;
         n++;
       });
-      return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), n };
+      return { pos: pos.subarray(0, n * 3), col: col.subarray(0, n * 3), rad: rad.subarray(0, n), scl: scl.subarray(0, n * 3), quat: quat.subarray(0, n * 4), src: src.subarray(0, n), n, all: { pos: aPos, alpha: aAlpha, rad: aRad, n: N } };
     } catch (e) {
       console.warn("\uC810\uAD70 \uCD94\uCD9C \uC2E4\uD328", e);
       return null;
@@ -57921,10 +57953,11 @@ void main() {
     return out;
   }
   var CLOUD_VS = `
-attribute float rad; varying vec3 vColor;
+attribute float rad; attribute float vis; varying vec3 vColor;
 uniform float uFocal; uniform float uMode; uniform float uPx; uniform float uScale; uniform float uMinPx; uniform float uMaxPx; uniform float uHideBig; uniform float uBigRad;
 void main() {
   vColor = color;
+  if (vis < 0.5) { gl_PointSize = 0.0; gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; } // \uC9C0\uC6B0\uAC1C\uB85C \uC9C0\uC6B4 \uAC00\uC6B0\uC2DC\uC548
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   float px = uPx;
   if (uMode > 0.5) { px = 2.0 * rad * uScale * uFocal / max(-mv.z, 1e-4); px = clamp(px, uMinPx, uMaxPx); }
@@ -57973,9 +58006,11 @@ void main() {
       seed ^= seed << 5;
       return (seed >>> 0) / 4294967296;
     };
+    const ds = cl.denseStart = new Int32Array(cl.n).fill(-1);
     let m = 0;
     for (let i = 0; i < cl.n; i++) {
       if (cl.rad[i] > hide) continue;
+      ds[i] = m;
       const cx = cl.pos[3 * i], cy = cl.pos[3 * i + 1], cz = cl.pos[3 * i + 2];
       const sx = cl.scl[3 * i] * spread, sy = cl.scl[3 * i + 1] * spread, sz = cl.scl[3 * i + 2] * spread;
       const qw = cl.quat[4 * i], qx = cl.quat[4 * i + 1], qy = cl.quat[4 * i + 2], qz = cl.quat[4 * i + 3];
@@ -58047,13 +58082,16 @@ void main() {
     g.setAttribute("position", new BufferAttribute(src.pos, 3));
     g.setAttribute("color", new BufferAttribute(srcCol, 3, true));
     g.setAttribute("rad", new BufferAttribute(isDense ? new Float32Array(src.n) : cl.rad || new Float32Array(cl.n), 1));
+    g.setAttribute("vis", new BufferAttribute(new Uint8Array(src.n).fill(1), 1));
     const m = new ShaderMaterial({ vertexShader: CLOUD_VS, fragmentShader: CLOUD_FS, vertexColors: true, uniforms: { uFocal: { value: 1e3 }, uMode: { value: 1 }, uPx: { value: 2 }, uScale: { value: 1 }, uMinPx: { value: 1 }, uMaxPx: { value: 24 }, uHideBig: { value: 1 }, uBigRad: { value: 1e30 } }, depthTest: true, depthWrite: true });
     cloudUniforms(m);
     updateDenseLabel();
     state.points3 = new Points(g, m);
     state.points3.frustumCulled = false;
+    state.points3.userData = { dense: isDense, K };
     state.points3.onBeforeRender = () => cloudUniforms(m);
     scene.add(state.points3);
+    updatePointsVis();
     applyViewMode();
   }
   function applyViewMode() {
@@ -58087,7 +58125,9 @@ void main() {
     for (let rad = state.settings.pickRadius; rad <= 40; rad *= 2) {
       const tanA = rad / f;
       const hits = [];
+      const erm = state.er && state.er.count && cl.src ? state.er.mask : null;
       for (let i = 0; i < cl.n; i++) {
+        if (erm && erm[cl.src[i]]) continue;
         const vx = cl.pos[3 * i] - o.x, vy = cl.pos[3 * i + 1] - o.y, vz = cl.pos[3 * i + 2] - o.z;
         const t = vx * d.x + vy * d.y + vz * d.z;
         if (t <= 1e-6) continue;
@@ -58309,6 +58349,11 @@ void main() {
       state.points3 = null;
     }
     state.cloud = null;
+    if (state.eraser) setEraser(false);
+    state.er = null;
+    state.erFlash = null;
+    state.srcFile = main;
+    updateEraserUI();
     resetAll(true);
     state.coordOffset = null;
     if (header) {
@@ -58362,18 +58407,7 @@ void main() {
     state.centers = pos ? Float32Array.from(pos) : null;
     state.cloud = (header ? buildCloudFromPly(buf, header) : null) || buildCloudFromMesh(mesh);
     rebuildPoints();
-    if (state.cloud) state.centers = state.cloud.n > 2e5 ? (() => {
-      const step = Math.ceil(state.cloud.n / 2e5);
-      const out = new Float32Array(Math.ceil(state.cloud.n / step) * 3);
-      let m = 0;
-      for (let i = 0; i < state.cloud.n; i += step) {
-        out[3 * m] = state.cloud.pos[3 * i];
-        out[3 * m + 1] = state.cloud.pos[3 * i + 1];
-        out[3 * m + 2] = state.cloud.pos[3 * i + 2];
-        m++;
-      }
-      return out.subarray(0, m * 3);
-    })() : state.cloud.pos;
+    if (state.cloud) rebuildCenters();
     let sidecar = null, cams = null;
     for (const jf of jsons) {
       try {
@@ -58414,7 +58448,7 @@ void main() {
     resolveUnits(header, sidecar);
     $("#loading").hidden = true;
     $("#dropzone").classList.add("hidden");
-    ["#btn-point", "#btn-dist", "#btn-scale", "#btn-export", "#btn-up", "#btn-home", "#btn-navpad", "#btn-analyze", "#btn-view"].forEach((s) => $(s).disabled = false);
+    ["#btn-point", "#btn-dist", "#btn-scale", "#btn-export", "#btn-up", "#btn-home", "#btn-navpad", "#btn-analyze", "#btn-view", "#btn-eraser"].forEach((s) => $(s).disabled = false);
     $("#btn-view").disabled = false;
     applyViewMode();
     $("#navpad").hidden = !state.settings.navpad;
@@ -58466,6 +58500,7 @@ void main() {
   }
   function startTask(kind, extra = {}) {
     if (!state.mesh) return;
+    if (state.eraser) setEraser(false);
     cancelPoint(false);
     state.task = { kind, pts: [], ...extra };
     $$("#btn-point,#btn-dist").forEach((b) => b.classList.remove("active"));
@@ -58494,7 +58529,7 @@ void main() {
     cancelPoint(false);
     $$("#btn-point,#btn-dist,#btn-analyze").forEach((b) => b.classList.remove("active"));
     glHost.classList.remove("measuring");
-    $("#measure-idle").hidden = false;
+    $("#measure-idle").hidden = !!state.eraser;
     $("#measure-live").hidden = true;
     $("#loupe").hidden = true;
     coach("", state.mesh ? "<b>\u25CF \uC810 \uCE21\uC815</b> \uB610\uB294 <b>\u2194 \uAC70\uB9AC \uCE21\uC815</b>\uC744 \uB20C\uB7EC \uC2DC\uC791\uD558\uC138\uC694." : "3DGS \uD30C\uC77C\uC744 \uC5F4\uC5B4 \uC2DC\uC791\uD558\uC138\uC694.");
@@ -58993,6 +59028,62 @@ void main() {
         ctx.stroke();
       }
     }
+    if (state.erFlash) {
+      const age = (performance.now() - state.erFlash.t0) / 1400;
+      const bb = age < 1 ? erFlashBox() : null;
+      if (age >= 1) state.erFlash = null;
+      else if (bb) {
+        ctx.save();
+        ctx.globalAlpha = 1 - age * age;
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#000b";
+        ctx.strokeRect(bb.x0, bb.y0, bb.x1 - bb.x0, bb.y1 - bb.y0);
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(bb.x0, bb.y0, bb.x1 - bb.x0, bb.y1 - bb.y0);
+        ctx.setLineDash([]);
+        ctx.font = "bold 13px system-ui, sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "bottom";
+        const ty = bb.y0 > 20 ? bb.y0 - 4 : bb.y1 + 18;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#000c";
+        ctx.strokeText(state.erFlash.label, bb.x0, ty);
+        ctx.fillStyle = "#bae6fd";
+        ctx.fillText(state.erFlash.label, bb.x0, ty);
+        ctx.restore();
+      }
+    }
+    if (state.eraser && state.mouse.inside) {
+      const R = state.settings.erSize, mx = state.mouse.x, my = state.mouse.y;
+      ctx.strokeStyle = "#000a";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(mx, my, R, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = state.er && state.er.down ? "#ef4444" : "#f472b6";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(mx, my, R, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(mx - 4, my);
+      ctx.lineTo(mx + 4, my);
+      ctx.moveTo(mx, my - 4);
+      ctx.lineTo(mx, my + 4);
+      ctx.stroke();
+      const lb = erModeShort();
+      ctx.font = "bold 12px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      const lx = mx + R * 0.71 + 5, ly = my - R * 0.71 - 3;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#000c";
+      ctx.strokeText(lb, lx, ly);
+      ctx.fillStyle = "#fbcfe8";
+      ctx.fillText(lb, lx, ly);
+    }
   }
   function pill(ctx, x, y, text, color, small = false) {
     ctx.font = `${small ? 12 : 13}px system-ui, sans-serif`;
@@ -59114,6 +59205,681 @@ void main() {
   $("#modal").addEventListener("click", (e) => {
     if (e.target.id === "modal") closeModal();
   });
+  var ER_G = 13;
+  var ER_PAD = 1.4;
+  function splatStore() {
+    const m = state.mesh;
+    return m ? m.splats || m.packedSplats || null : null;
+  }
+  function eraserInit() {
+    if (state.er) return true;
+    const all = state.cloud && state.cloud.all, sp = splatStore();
+    if (!all || !sp) {
+      toast("\uC774 \uD30C\uC77C\uC740 \uC9C0\uC6B0\uAC1C\uB97C \uC4F8 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4(\uAC00\uC6B0\uC2DC\uC548 \uC815\uBCF4\uB97C \uC77D\uC9C0 \uBABB\uD568).", "warn", 6e3);
+      return false;
+    }
+    const N = all.n, kind = sp.packedArray ? "packed" : sp.extArrays ? "ext" : null;
+    if (!kind || sp.numSplats !== N) {
+      toast(`\uC774 \uD30C\uC77C\uC740 \uB80C\uB354\uB7EC \uB0B4\uBD80 \uAD6C\uC870\uAC00 \uB2EC\uB77C \uC9C0\uC6B0\uAC1C\uB97C \uC4F8 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4 (\uB80C\uB354\uB7EC ${sp.numSplats} / \uD30C\uC77C ${N}).`, "warn", 7e3);
+      return false;
+    }
+    const step = Math.max(1, Math.floor(N / 2e5));
+    const tmp2 = [];
+    for (let i = 0; i < N; i += step) tmp2.push(all.rad[i]);
+    tmp2.sort((a, b) => a - b);
+    state.er = { mask: new Uint8Array(N), count: 0, undo: [], redo: [], seq: 0, savedAt: null, orig: null, kind, medRad: tmp2[tmp2.length >> 1] || 0, saved: true, down: false, pending: null, last: null, stroke: null, lastFlush: 0, cand: new Int32Array(65536), candT: new Float32Array(65536) };
+    return true;
+  }
+  function erSetHidden(idxs, hide) {
+    const er = state.er, sp = splatStore();
+    if (!sp) return;
+    const N = er.mask.length;
+    if (er.kind === "packed") {
+      const A = sp.packedArray;
+      if (!er.orig) {
+        er.orig = new Uint8Array(N);
+        for (let i = 0; i < N; i++) er.orig[i] = A[i * 4] >>> 24;
+      }
+      for (let k = 0; k < idxs.length; k++) {
+        const i = idxs[k];
+        A[i * 4] = hide ? A[i * 4] & 16777215 : A[i * 4] & 16777215 | er.orig[i] << 24;
+      }
+    } else {
+      const A = sp.extArrays[0];
+      if (!er.orig) {
+        er.orig = new Uint16Array(N);
+        for (let i = 0; i < N; i++) er.orig[i] = A[i * 4 + 3] & 65535;
+      }
+      for (let k = 0; k < idxs.length; k++) {
+        const i = idxs[k];
+        A[i * 4 + 3] = hide ? A[i * 4 + 3] & 4294901760 : A[i * 4 + 3] & 4294901760 | er.orig[i];
+      }
+    }
+    for (let k = 0; k < idxs.length; k++) {
+      const i = idxs[k];
+      if (hide) {
+        if (!er.mask[i]) {
+          er.mask[i] = 1;
+          er.count++;
+        }
+      } else if (er.mask[i]) {
+        er.mask[i] = 0;
+        er.count--;
+      }
+    }
+  }
+  function erFlush(force) {
+    const er = state.er, sp = splatStore();
+    if (!er || !sp) return;
+    const now = performance.now();
+    if (!force && now - er.lastFlush < 80) {
+      er.flushPending = true;
+      return;
+    }
+    er.lastFlush = now;
+    er.flushPending = false;
+    if ("needsUpdate" in sp) sp.needsUpdate = true;
+    if (sp.textures) for (const t of sp.textures) t.needsUpdate = true;
+    if (state.mesh.updateVersion) state.mesh.updateVersion();
+  }
+  function erLayerCount() {
+    const st = state.settings;
+    return st.erMode === "multi" ? Math.max(2, Math.min(10, Math.round(st.erLayers) || 3)) : 1;
+  }
+  function erModeName() {
+    const m = state.settings.erMode;
+    return m === "front" ? "\uBCF4\uC774\uB294 \uCE35\uB9CC (1\uCE35)" : m === "multi" ? `\uC5EC\uB7EC \uCE35 (${erLayerCount()}\uCE35)` : m === "big" ? "\uD070 \uAC00\uC6B0\uC2DC\uC548\uB9CC" : "\uC804\uBD80 (\uAD00\uD1B5)";
+  }
+  function erModeShort() {
+    const m = state.settings.erMode;
+    return m === "front" ? "1\uCE35" : m === "multi" ? `${erLayerCount()}\uCE35` : m === "big" ? "\uD070 \uAC83\uB9CC" : "\uC804\uBD80";
+  }
+  function erDiagram() {
+    const mode = state.settings.erMode, L = erLayerCount(), X = [78, 122, 166, 210, 254], blobs = [[100, 27, 1], [188, 45, 3]];
+    const gone = (k) => mode === "all" || mode === "front" && k === 0 || mode === "multi" && k < L, bgone = (b) => mode === "all" || mode === "big" || mode === "multi" && b[2] < L;
+    let h = '<svg viewBox="0 0 280 86" width="100%" role="img" aria-label="\uC9C0\uC6B0\uB294 \uAE4A\uC774 \uC124\uBA85 \uADF8\uB9BC"><path d="M22 38 L272 10 L272 66 Z" fill="#f472b622" stroke="#f472b655" stroke-width="1"/><circle cx="14" cy="38" r="7" fill="none" stroke="#cbd5e1" stroke-width="1.5"/><circle cx="16" cy="38" r="2.5" fill="#cbd5e1"/><text x="14" y="58" font-size="9" fill="#94a3b8" text-anchor="middle">\uD654\uBA74</text>';
+    X.forEach((x, k) => {
+      const g = gone(k), y0 = 38 - (x - 22) * 0.112 - 3, y1 = 38 + (x - 22) * 0.112 + 3;
+      h += `<line x1="${x}" y1="${y0.toFixed(1)}" x2="${x}" y2="${y1.toFixed(1)}" stroke="${g ? "#f472b6" : "#94a3b8"}" stroke-width="5" stroke-linecap="round" ${g ? 'stroke-dasharray="1 7" opacity="0.9"' : ""}/><text x="${x}" y="82" font-size="10" fill="${g ? "#f472b6" : "#94a3b8"}" text-anchor="middle">${"\u2460\u2461\u2462\u2463\u2464"[k]}${g ? "\u2715" : ""}</text>`;
+    });
+    blobs.forEach((b) => {
+      const g = bgone(b);
+      h += `<circle cx="${b[0]}" cy="${b[1]}" r="8" fill="${g ? "none" : "#64748b88"}" stroke="${g ? "#f472b6" : "#94a3b8"}" stroke-width="1.5" ${g ? 'stroke-dasharray="3 3"' : ""}/>`;
+    });
+    h += "</svg>";
+    const cap = mode === "front" ? "<b>\u2460</b>(\uC9C0\uAE08 \uBCF4\uC774\uB294 \uAC89\uCE35)\uB9CC \uC9C0\uC6CC\uC9D1\uB2C8\uB2E4. \uB9C8\uC6B0\uC2A4\uB97C \uB5D0\uB2E4\uAC00 \uB2E4\uC2DC \uBB38\uC9C0\uB974\uBA74 \u2461 \uAC00 \uC9C0\uC6CC\uC9D1\uB2C8\uB2E4." : mode === "multi" ? `\uAC89\uC5D0\uC11C\uBD80\uD130 <b>${L}\uACB9</b>${L > 5 ? " (\uADF8\uB9BC\uC740 5\uACB9\uAE4C\uC9C0\uB9CC \uD45C\uC2DC)" : ""}\uACFC \uADF8 \uC0AC\uC774\uC758 \uAC83\uC774 \uD55C \uBC88\uC5D0 \uC9C0\uC6CC\uC9D1\uB2C8\uB2E4. \uADF8 \uB4A4\uB294 \uB0A8\uC2B5\uB2C8\uB2E4.` : mode === "big" ? "\uAE4A\uC774\uC5D0 \uC0C1\uAD00\uC5C6\uC774 <b>\uD070 \uAC83(\u25CF)</b>\uB9CC \uC9C0\uC6CC\uC9C0\uACE0, \uACB9(\uC2E4\uC81C \uD45C\uBA74\uC758 \uC791\uC740 \uAC00\uC6B0\uC2DC\uC548)\uC740 \uBAA8\uB450 \uB0A8\uC2B5\uB2C8\uB2E4." : "\uBD93 \uC544\uB798\uC5D0 \uC788\uB294 \uAC83\uC774 \uAE4A\uC774\uC5D0 \uC0C1\uAD00\uC5C6\uC774 <b>\uC804\uBD80</b> \uC9C0\uC6CC\uC9D1\uB2C8\uB2E4.";
+    return h + `<div class="small muted">\uC138\uB85C \uB9C9\uB300 = \uD654\uBA74\uC744 \uAC00\uB9AC\uB294 \uD55C \uACB9(\uD45C\uBA74) \xB7 \u25CF = \uD070 \uC7A1\uD2F0 \xB7 <span style="color:#f472b6">\uBD84\uD64D \uC810\uC120 \u2715</span> = \uC774\uBC88 \uBD93\uC9C8\uC5D0 \uC9C0\uC6CC\uC9D0<br>${cap}</div>`;
+  }
+  var ER_TILE = 48;
+  var ER_TMARGIN = 384;
+  function erTiles() {
+    const er = state.er, all = state.cloud.all, P = all.pos, N = all.n, { w, h } = viewSize(), f = focalPx();
+    camera.updateMatrixWorld();
+    const me = camera.matrixWorld.elements;
+    let key = `${N}|${w}|${h}|${f}`;
+    for (let k = 0; k < 16; k++) key += "|" + me[k];
+    if (er.tiles && er.tiles.key === key) return er.tiles;
+    const T = ER_TILE, m = ER_TMARGIN, tw = Math.ceil((w + 2 * m) / T), th = Math.ceil((h + 2 * m) / T), start = new Uint32Array(tw * th + 1), tid = new Int32Array(N);
+    const rx = me[0], ry = me[1], rz = me[2], ux = me[4], uy = me[5], uz = me[6], fx = -me[8], fy = -me[9], fz = -me[10], cx = me[12], cy = me[13], cz = me[14], hw = w / 2 + m, hh = h / 2 + m, xmax = w + 2 * m, ymax = h + 2 * m;
+    for (let i = 0, j = 0; i < N; i++, j += 3) {
+      const vx = P[j] - cx, vy = P[j + 1] - cy, vz = P[j + 2] - cz, z = vx * fx + vy * fy + vz * fz;
+      if (!(z > 1e-6)) {
+        tid[i] = -1;
+        continue;
+      }
+      const sx = hw + (vx * rx + vy * ry + vz * rz) / z * f, sy = hh - (vx * ux + vy * uy + vz * uz) / z * f;
+      if (!(sx >= 0 && sx < xmax && sy >= 0 && sy < ymax)) {
+        tid[i] = -1;
+        continue;
+      }
+      const c = (sy / T | 0) * tw + (sx / T | 0);
+      tid[i] = c;
+      start[c + 1]++;
+    }
+    for (let c = 0; c < tw * th; c++) start[c + 1] += start[c];
+    const order = new Uint32Array(start[tw * th]), fill2 = start.slice(0, tw * th);
+    for (let i = 0; i < N; i++) {
+      const c = tid[i];
+      if (c >= 0) order[fill2[c]++] = i;
+    }
+    return er.tiles = { key, tw, th, m, start, order, fx, fy, fz };
+  }
+  function eraseAt(px2, py2) {
+    const er = state.er, all = state.cloud.all, P = all.pos, RAD = all.rad, mask = er.mask, N = all.n, st = state.settings;
+    const ray = rayFromPixel(px2, py2);
+    const ox = ray.o.x, oy = ray.o.y, oz = ray.o.z, dx = ray.d.x, dy = ray.d.y, dz2 = ray.d.z;
+    const f = focalPx(), R = st.erSize, tan2 = R / f * (R / f), mode = st.erMode, bigThr = er.medRad * st.erBig;
+    const layered = mode === "front" || mode === "multi", L = erLayerCount();
+    const Rg = R * ER_PAD, tanC = layered ? tan2 * ER_PAD * ER_PAD : tan2;
+    let ci = er.cand, ct = er.candT, M = 0;
+    const tl = erTiles(), cosT = Math.max(0.05, dx * tl.fx + dy * tl.fy + dz2 * tl.fz), tanT = Math.sqrt(Math.max(0, 1 - cosT * cosT)) / cosT, tanA = Math.sqrt(tanC);
+    const rpix = (tanT * tanA < 0.9 ? f * ((tanT + tanA) / (1 - tanT * tanA) - tanT) : 1e9) + 2, T = ER_TILE;
+    const tx0 = Math.max(0, Math.floor((px2 - rpix + tl.m) / T)), tx1 = Math.min(tl.tw - 1, Math.floor((px2 + rpix + tl.m) / T)), ty0 = Math.max(0, Math.floor((py2 - rpix + tl.m) / T)), ty1 = Math.min(tl.th - 1, Math.floor((py2 + rpix + tl.m) / T)), TS = tl.start, TO = tl.order;
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) for (let q = TS[ty * tl.tw + tx], qe = TS[ty * tl.tw + tx + 1]; q < qe; q++) {
+      const i = TO[q], j = 3 * i, mk = mask[i];
+      if (mk === 1 || mk === 2 && !layered) continue;
+      const vx = P[j] - ox, vy = P[j + 1] - oy, vz = P[j + 2] - oz;
+      const t = vx * dx + vy * dy + vz * dz2;
+      if (t <= 1e-6) continue;
+      if (vx * vx + vy * vy + vz * vz - t * t >= t * t * tanC) continue;
+      if (mode === "big" && RAD[i] <= bigThr) continue;
+      if (M === ci.length) {
+        const a = new Int32Array(M * 2);
+        a.set(ci);
+        ci = er.cand = a;
+        const b = new Float32Array(M * 2);
+        b.set(ct);
+        ct = er.candT = b;
+      }
+      ci[M] = i;
+      ct[M] = t;
+      M++;
+    }
+    if (!M) return 0;
+    let out;
+    if (!layered) out = ci.slice(0, M);
+    else {
+      const ord = new Uint32Array(M);
+      for (let k = 0; k < M; k++) ord[k] = k;
+      ord.sort((a, b) => ct[a] - ct[b]);
+      const G = ER_G, cs = 2 * Rg / G, cov = new Float32Array(G * G), lay = new Uint8Array(G * G), tsat = new Float32Array(G * G).fill(-Infinity), ALPHA = all.alpha;
+      const hit = (c, t, w) => {
+        if (lay[c] > 0 && t <= tsat[c] * 1.04) return lay[c] <= L;
+        const v = lay[c] < L;
+        cov[c] += w;
+        if (cov[c] >= 1) {
+          if (lay[c] < 255) lay[c]++;
+          cov[c] = 0;
+          tsat[c] = t;
+        }
+        return v;
+      };
+      const dv = new Vector3(dx, dy, dz2), rt = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      rt.addScaledVector(dv, -rt.dot(dv)).normalize();
+      const uv = new Vector3().crossVectors(dv, rt);
+      const res = [];
+      const clampI = (q) => q < 0 ? 0 : q >= G ? G - 1 : q;
+      for (let k = 0; k < M; k++) {
+        const m = ord[k], i = ci[m], t = ct[m], j = 3 * i;
+        const vx = P[j] - ox, vy = P[j + 1] - oy, vz = P[j + 2] - oz;
+        const u = (vx * rt.x + vy * rt.y + vz * rt.z) / t * f, w = (vx * uv.x + vy * uv.y + vz * uv.z) / t * f, rpx = RAD[i] * f / t, a = ALPHA[i] / 255;
+        let vis = false;
+        if (rpx <= cs / 2) {
+          if (hit(clampI(Math.floor((w + Rg) / cs)) * G + clampI(Math.floor((u + Rg) / cs)), t, a * Math.min(1, 2 * Math.PI * rpx * rpx / (cs * cs)))) vis = true;
+        } else {
+          const ext = 1.5 * rpx, c0 = clampI(Math.floor((u - ext + Rg) / cs)), c1 = clampI(Math.floor((u + ext + Rg) / cs)), r0 = clampI(Math.floor((w - ext + Rg) / cs)), r1 = clampI(Math.floor((w + ext + Rg) / cs));
+          for (let r = r0; r <= r1; r++) for (let cc = c0; cc <= c1; cc++) if (hit(r * G + cc, t, a)) vis = true;
+        }
+        if (vis && mask[i] === 0 && u * u + w * w < R * R) res.push(i);
+      }
+      out = Int32Array.from(res);
+    }
+    if (!out.length) return 0;
+    erSetHidden(out, true);
+    if (er.stroke) {
+      er.stroke.push(out);
+      for (let k = 0; k < out.length; k++) mask[out[k]] = 2;
+    }
+    return out.length;
+  }
+  function erDown(x, y) {
+    const er = state.er;
+    if (!er) return;
+    er.down = true;
+    er.stroke = [];
+    er.last = null;
+    er.pending = { x, y };
+    eraseTick();
+  }
+  function eraseTick() {
+    const er = state.er;
+    if (!er || !er.pending) {
+      if (er && er.flushPending) erFlush(false);
+      return;
+    }
+    const p = er.pending;
+    er.pending = null;
+    const a = er.last || p;
+    const dist = Math.hypot(p.x - a.x, p.y - a.y);
+    const steps = Math.min(6, Math.max(1, Math.ceil(dist / (state.settings.erSize * 0.6))));
+    let n = 0;
+    for (let s = 1; s <= steps; s++) n += eraseAt(a.x + (p.x - a.x) * s / steps, a.y + (p.y - a.y) * s / steps);
+    er.last = p;
+    if (n) {
+      erFlush(false);
+      updateEraserUI();
+    }
+  }
+  function erUp() {
+    const er = state.er;
+    if (!er || !er.down) return;
+    eraseTick();
+    er.down = false;
+    const parts = er.stroke || [];
+    er.stroke = null;
+    const total = parts.reduce((s, q) => s + q.length, 0);
+    if (!total) {
+      erFlush(true);
+      return;
+    }
+    const arr = new Int32Array(total);
+    let o = 0;
+    for (const q of parts) {
+      arr.set(q, o);
+      o += q.length;
+    }
+    for (let k = 0; k < arr.length; k++) er.mask[arr[k]] = 1;
+    erPush({ op: "erase", idx: arr, label: `\uBD93\uC9C8 \xB7 ${erModeShort()} \xB7 ${state.settings.erSize} px` });
+  }
+  function erPush(entry) {
+    const er = state.er;
+    entry.no = ++er.seq;
+    entry.n = entry.idx.length;
+    er.undo.push(entry);
+    er.redo = [];
+    erAfterChange();
+  }
+  function erApply(e, forward) {
+    erSetHidden(e.idx, e.op === "erase" === forward);
+  }
+  function erAfterChange() {
+    const er = state.er;
+    const top = er.undo.length ? er.undo[er.undo.length - 1] : null;
+    er.saved = er.count === 0 || !!er.savedAt && er.savedAt.len === er.undo.length && er.savedAt.top === top;
+    erFlush(true);
+    updatePointsVis();
+    rebuildCenters();
+    updateEraserUI();
+    updateCheckDot();
+  }
+  function erUndo() {
+    const er = state.er;
+    if (!er) return;
+    if (er.down) erUp();
+    if (!er.undo.length) {
+      toast("\uB418\uB3CC\uB9B4 \uC9C0\uC6B0\uAC1C \uC791\uC5C5\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.", "info", 1800).classList.add("passive");
+      return;
+    }
+    const e = er.undo.pop();
+    erApply(e, false);
+    er.redo.push(e);
+    erAfterChange();
+    erNotify("undo", [e]);
+  }
+  function erRedo() {
+    const er = state.er;
+    if (!er) return;
+    if (er.down) erUp();
+    if (!er.redo.length) {
+      toast("\uB2E4\uC2DC \uC2E4\uD589\uD560 \uC791\uC5C5\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. (\uB418\uB3CC\uB9B0 \uB4A4\uC5D0\uB9CC \uC4F8 \uC218 \uC788\uC2B5\uB2C8\uB2E4)", "info", 2200).classList.add("passive");
+      return;
+    }
+    const e = er.redo.pop();
+    erApply(e, true);
+    er.undo.push(e);
+    erAfterChange();
+    erNotify("redo", [e]);
+  }
+  function erJump(pos) {
+    const er = state.er;
+    if (!er) return;
+    if (er.down) erUp();
+    const done = [], dir = pos < er.undo.length ? "undo" : "redo";
+    while (er.undo.length > pos) {
+      const e = er.undo.pop();
+      erApply(e, false);
+      er.redo.push(e);
+      done.push(e);
+    }
+    while (er.undo.length < pos && er.redo.length) {
+      const e = er.redo.pop();
+      erApply(e, true);
+      er.undo.push(e);
+      done.push(e);
+    }
+    if (!done.length) return;
+    erAfterChange();
+    erNotify(dir, done);
+  }
+  function erRestoreAll() {
+    const er = state.er;
+    if (!er || !er.count) return;
+    const idx = [];
+    for (let i = 0; i < er.mask.length; i++) if (er.mask[i]) idx.push(i);
+    const arr = Int32Array.from(idx);
+    erSetHidden(arr, false);
+    erPush({ op: "restore", idx: arr, label: "\uC804\uCCB4 \uBCF5\uC6D0" });
+    toast("<b>\uC804\uCCB4 \uBCF5\uC6D0</b>\uC9C0\uC6B4 \uAC83\uC744 \uBAA8\uB450 \uB418\uC0B4\uB838\uC2B5\uB2C8\uB2E4. \uC774\uAC83\uB3C4 <strong>\u21B6 \uB418\uB3CC\uB9AC\uAE30(Ctrl+Z)</strong>\uB85C \uCDE8\uC18C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.", "info", 4e3);
+  }
+  function erNotify(kind, list) {
+    const er = state.er;
+    let back = 0, gone = 0;
+    for (const e of list) {
+      if (e.op === "erase" === (kind === "redo")) gone += e.n;
+      else back += e.n;
+    }
+    const what = list.length === 1 ? `#${list[0].no} ${list[0].label}` : `${list.length}\uB2E8\uACC4`;
+    const parts = [];
+    if (back) parts.push(`\uAC00\uC6B0\uC2DC\uC548 <strong>${back.toLocaleString()}</strong>\uAC1C \uB418\uC0B4\uB9BC`);
+    if (gone) parts.push(`\uAC00\uC6B0\uC2DC\uC548 <strong>${gone.toLocaleString()}</strong>\uAC1C \uB2E4\uC2DC \uC9C0\uC6C0`);
+    const seen = erFlash(list, kind === "undo" ? "\u21B6 \uB418\uB3CC\uB9BC" : "\u21B7 \uB2E4\uC2DC \uC2E4\uD589");
+    if (state.erToast) state.erToast.remove();
+    state.erToast = toast(`<b>${kind === "undo" ? "\u21B6 \uB418\uB3CC\uB9BC" : "\u21B7 \uB2E4\uC2DC \uC2E4\uD589"} \u2014 ${what}</b>${parts.join(", ")}${seen ? ' <span class="muted">(\uD30C\uB780 \uC810\uC120 \uC0C1\uC790 \uC790\uB9AC)</span>' : ' <span class="muted">(\uC9C0\uAE08 \uD654\uBA74 \uBC16)</span>'}<br><span class="muted small">\uB418\uB3CC\uB9AC\uAE30 ${er.undo.length}\uB2E8\uACC4 \xB7 \uB2E4\uC2DC \uC2E4\uD589 ${er.redo.length}\uB2E8\uACC4 \uAC00\uB2A5</span>`, "info", 3500);
+    state.erToast.classList.add("passive");
+  }
+  function erFlash(list, label) {
+    const P = state.cloud.all.pos;
+    let tot = 0;
+    for (const e of list) tot += e.n;
+    const step = Math.max(1, Math.ceil(tot / 1200));
+    const pts = [];
+    let c = 0;
+    for (const e of list) for (let k = 0; k < e.idx.length; k++, c++) if (c % step === 0) {
+      const i = e.idx[k];
+      pts.push(P[3 * i], P[3 * i + 1], P[3 * i + 2]);
+    }
+    state.erFlash = { pts: Float32Array.from(pts), t0: performance.now(), label };
+    const bb = erFlashBox();
+    return !!bb;
+  }
+  var _fv = new Vector3();
+  function erFlashBox() {
+    const fl2 = state.erFlash;
+    if (!fl2) return null;
+    const { w, h } = viewSize();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
+    for (let i = 0; i < fl2.pts.length; i += 3) {
+      _fv.set(fl2.pts[i], fl2.pts[i + 1], fl2.pts[i + 2]);
+      const s = project(_fv);
+      if (!s.front || s.x < -50 || s.y < -50 || s.x > w + 50 || s.y > h + 50) continue;
+      n++;
+      if (s.x < x0) x0 = s.x;
+      if (s.x > x1) x1 = s.x;
+      if (s.y < y0) y0 = s.y;
+      if (s.y > y1) y1 = s.y;
+    }
+    return n ? { x0: Math.max(2, x0 - 10), y0: Math.max(2, y0 - 10), x1: Math.min(w - 2, x1 + 10), y1: Math.min(h - 2, y1 + 10) } : null;
+  }
+  function erHistoryHTML() {
+    const er = state.er;
+    if (!er) return "";
+    const list = er.undo.concat(er.redo.slice().reverse()), cur = er.undo.length, from = Math.max(0, list.length - 60);
+    let h = `<li data-pos="0" class="${cur === 0 ? "cur" : ""}">\uCC98\uC74C \uC0C1\uD0DC (\uC9C0\uC6B0\uAE30 \uC804)${cur === 0 ? ' <span class="tag-cur">\u25C0 \uC9C0\uAE08</span>' : ""}</li>`;
+    if (from > 0) h += `<li class="gap">\u2026 \uC55E\uC758 ${from}\uB2E8\uACC4 \uC0DD\uB7B5</li>`;
+    for (let k = from; k < list.length; k++) {
+      const e = list[k], pos = k + 1, fut = pos > cur;
+      h += `<li data-pos="${pos}" class="${pos === cur ? "cur" : ""}${fut ? " fut" : ""}" title="${fut ? "\uB2E4\uC2DC \uC2E4\uD589\uD574\uC11C \uC774 \uB2E8\uACC4\uB85C" : "\uC774 \uB2E8\uACC4\uB85C \uB418\uB3CC\uB9AC\uAE30"}">${fut ? "\u21B7 " : ""}#${e.no} ${e.label} \u2014 ${e.op === "erase" ? "" : "\uB418\uC0B4\uB9BC "}${e.n.toLocaleString()}\uAC1C${pos === cur ? ' <span class="tag-cur">\u25C0 \uC9C0\uAE08</span>' : ""}</li>`;
+    }
+    return h;
+  }
+  function updateEraserUI() {
+    const er = state.er, st = state.settings;
+    const N = er ? er.mask.length : 0, M = er ? er.count : 0;
+    $("#er-count").innerHTML = er ? `\uC9C0\uC6B4 \uAC00\uC6B0\uC2DC\uC548 <b>${M.toLocaleString()}</b> / ${N.toLocaleString()} (${N ? (100 * M / N).toFixed(2) : 0} %)${M && !er.saved ? ' \xB7 <span style="color:#f59e0b">\uC800\uC7A5 \uC548 \uB428</span>' : M ? " \xB7 \uC800\uC7A5\uB428" : ""}` : "";
+    const nu = er ? er.undo.length : 0, nr = er ? er.redo.length : 0;
+    $$("#er-undo, #er-mini-undo").forEach((b) => b.disabled = !nu);
+    $$("#er-redo, #er-mini-redo").forEach((b) => b.disabled = !nr);
+    $("#er-reset").disabled = !M;
+    $("#er-save").disabled = !M;
+    $$(".er-undo-n").forEach((x) => x.textContent = nu ? `(${nu})` : "");
+    $$(".er-redo-n").forEach((x) => x.textContent = nr ? `(${nr})` : "");
+    const hl = $("#er-hist");
+    if (hl) {
+      hl.innerHTML = erHistoryHTML();
+      $("#er-hist-n").textContent = er ? `${nu + nr}\uB2E8\uACC4 \xB7 \uC9C0\uAE08 ${nu}\uB2E8\uACC4` : "";
+      const c = hl.querySelector(".cur");
+      if (c) hl.scrollTop = Math.max(0, c.offsetTop - hl.clientHeight / 2);
+    }
+    const mini = $("#er-mini");
+    if (mini) {
+      mini.hidden = !!state.eraser || !er || !(nu || nr);
+      if (!mini.hidden) $("#er-mini-text").innerHTML = `\u{1F9FD} \uC9C0\uC6B0\uAC1C \uAE30\uB85D \u2014 \uC9C0\uC6C0 <b>${M.toLocaleString()}</b>\uAC1C${M && !er.saved ? ' \xB7 <span style="color:#f59e0b">\uC800\uC7A5 \uC548 \uB428</span>' : ""}`;
+    }
+    $("#er-size").value = st.erSize;
+    $("#er-size-label").textContent = `${st.erSize} px`;
+    $("#er-big").value = st.erBig;
+    $("#er-big-label").textContent = er ? `\uC911\uC559\uAC12\uC758 ${st.erBig}\uBC30 = ${fmtLen(er.medRad * st.erBig)} \uC774\uC0C1` : `\uC911\uC559\uAC12\uC758 ${st.erBig}\uBC30`;
+    $$("input[name=ermode]").forEach((r) => r.checked = r.value === st.erMode);
+    ["front", "multi", "big", "all"].forEach((m) => $(`#er-opt-${m}`).classList.toggle("on", st.erMode === m));
+    const LL = Math.max(2, Math.min(10, Math.round(st.erLayers) || 3));
+    $("#er-layers").value = LL;
+    $("#er-layers-label").textContent = `${LL}\uCE35`;
+    $("#er-diagram").innerHTML = erDiagram();
+    $("#btn-eraser").classList.toggle("active", !!state.eraser);
+    $("#btn-eraser").classList.toggle("dirty", !!(er && M && !er.saved));
+    if (state.eraser) coach("\u{1F9FD}", `<b>\uC9C0\uC6B0\uAC1C \xB7 ${erModeName()}</b> \u2014 <b>\uC67C\uCABD \uB4DC\uB798\uADF8</b>\uB85C \uBB38\uC9C8\uB7EC \uC9C0\uC6C1\uB2C8\uB2E4 \xB7 \uC624\uB978\uCABD \uB4DC\uB798\uADF8: \uD68C\uC804 \xB7 \uD720: \uD655\uB300 \xB7 \uBD93 \uD06C\uAE30 <b>[ ]</b> \xB7 \uAE4A\uC774 <b>1</b>~<b>9</b>\xB7<b>0</b>\xB7<b>B</b> \xB7 \uB418\uB3CC\uB9AC\uAE30 <b>Ctrl+Z</b> \xB7 \uB2E4\uC2DC \uC2E4\uD589 <b>Ctrl+Y</b> \xB7 \uB05D\uB0B4\uAE30 <b>E</b>`, er && M ? `\uC9C0\uC6C0 ${M.toLocaleString()}\uAC1C${er.saved ? "" : " (\uC800\uC7A5 \uC548 \uB428)"}` : "");
+  }
+  function setEraser(on) {
+    if (on) {
+      if (!state.mesh || !eraserInit()) return;
+      if (state.task) endTask();
+      state.eraser = true;
+      controls.mouseButtons = { LEFT: -1, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.ROTATE };
+      showTab("measure");
+    } else {
+      if (state.er && state.er.down) erUp();
+      state.eraser = false;
+      if (state.er) {
+        state.er.down = false;
+        state.er.pending = null;
+        state.er.tiles = null;
+      }
+      controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+      if (!state.task) coach("", state.mesh ? "<b>\u25CF \uC810 \uCE21\uC815</b> \uB610\uB294 <b>\u2194 \uAC70\uB9AC \uCE21\uC815</b>\uC744 \uB20C\uB7EC \uC2DC\uC791\uD558\uC138\uC694." : "3DGS \uD30C\uC77C\uC744 \uC5F4\uC5B4 \uC2DC\uC791\uD558\uC138\uC694.");
+    }
+    $("#eraser-panel").hidden = !state.eraser;
+    $("#measure-idle").hidden = state.eraser || !!state.task;
+    glHost.classList.toggle("erasing", !!state.eraser);
+    updateEraserUI();
+  }
+  function updatePointsVis() {
+    const pts = state.points3;
+    if (!pts) return;
+    const a = pts.geometry.getAttribute("vis");
+    if (!a) return;
+    const arr = a.array, cl = state.cloud, er = state.er;
+    if (!er || !er.count) arr.fill(1);
+    else {
+      const mask = er.mask, src = cl.src;
+      if (pts.userData.dense) {
+        const K = pts.userData.K, ds = cl.denseStart;
+        for (let c = 0; c < cl.n; c++) {
+          const s0 = ds[c];
+          if (s0 < 0) continue;
+          const v = mask[src[c]] ? 0 : 1;
+          if (arr[s0] !== v) arr.fill(v, s0, s0 + K);
+        }
+      } else for (let c = 0; c < cl.n; c++) arr[c] = mask[src[c]] ? 0 : 1;
+    }
+    a.needsUpdate = true;
+  }
+  function rebuildCenters() {
+    const cl = state.cloud;
+    if (!cl) return;
+    const mask = state.er && state.er.count ? state.er.mask : null, src = cl.src;
+    const step = Math.max(1, Math.ceil(cl.n / 2e5));
+    const out = new Float32Array(Math.ceil(cl.n / step) * 3);
+    let m = 0;
+    for (let i = 0; i < cl.n; i += step) {
+      if (mask && src && mask[src[i]]) continue;
+      out[3 * m] = cl.pos[3 * i];
+      out[3 * m + 1] = cl.pos[3 * i + 1];
+      out[3 * m + 2] = cl.pos[3 * i + 2];
+      m++;
+    }
+    state.centers = out.subarray(0, m * 3);
+  }
+  function canExactSave() {
+    const h = state.header;
+    if (!h || h.compressed || h.format !== "binary_little_endian" || h.order[0] !== "vertex" || !state.srcFile) return false;
+    return h.elements.vertex.props.every((q) => q.type !== "list" && PLY_TYPE_SIZE[q.type]);
+  }
+  async function* cleanedPlyChunks(onProgress) {
+    const h = state.header, file = state.srcFile, er = state.er, v = h.elements.vertex;
+    const stride = v.props.reduce((s, q) => s + PLY_TYPE_SIZE[q.type], 0);
+    const N = v.count, kept = N - er.count, mask = er.mask;
+    const hb = new Uint8Array(await file.slice(0, h.headerLength).arrayBuffer());
+    let text = "";
+    for (let i = 0; i < hb.length; i++) text += String.fromCharCode(hb[i]);
+    text = text.replace(/element vertex \d+/, () => `element vertex ${kept}`).replace(/(format [^\n]*\n)/, (m0) => `${m0}comment cleaned with 3DGS measurer eraser: removed ${er.count} of ${N} gaussians
+`);
+    const head = new Uint8Array(text.length);
+    for (let i = 0; i < text.length; i++) head[i] = text.charCodeAt(i) & 255;
+    yield head;
+    const ROWS = Math.max(1, Math.floor(32e6 / stride));
+    for (let r0 = 0; r0 < N; r0 += ROWS) {
+      const r1 = Math.min(N, r0 + ROWS);
+      const src = new Uint8Array(await file.slice(h.headerLength + r0 * stride, h.headerLength + r1 * stride).arrayBuffer());
+      if (src.length !== (r1 - r0) * stride) throw new Error("\uC6D0\uBCF8 \uD30C\uC77C \uAE38\uC774\uAC00 \uB2EC\uB77C\uC84C\uC2B5\uB2C8\uB2E4");
+      let cnt = 0;
+      for (let i = r0; i < r1; i++) if (!mask[i]) cnt++;
+      if (cnt === r1 - r0) yield src;
+      else if (cnt) {
+        const out = new Uint8Array(cnt * stride);
+        let o = 0;
+        for (let i = r0; i < r1; ) {
+          if (mask[i]) {
+            i++;
+            continue;
+          }
+          let j = i + 1;
+          while (j < r1 && !mask[j]) j++;
+          out.set(src.subarray((i - r0) * stride, (j - r0) * stride), o);
+          o += (j - i) * stride;
+          i = j;
+        }
+        yield out;
+      }
+      if (onProgress) onProgress(r1 / N);
+    }
+    const tail = h.headerLength + N * stride;
+    if (tail < file.size) yield new Uint8Array(await file.slice(tail).arrayBuffer());
+  }
+  async function* splatsPlyChunks(onProgress) {
+    const sp = splatStore(), er = state.er, N = sp.numSplats, kept = N - er.count, mask = er.mask, off = state.coordOffset || [0, 0, 0];
+    const names = ["x", "y", "z", "nx", "ny", "nz", "f_dc_0", "f_dc_1", "f_dc_2", "opacity", "scale_0", "scale_1", "scale_2", "rot_0", "rot_1", "rot_2", "rot_3"];
+    const head = ["ply", "format binary_little_endian 1.0", `comment cleaned with 3DGS measurer eraser: removed ${er.count} of ${N} gaussians (exported as SH degree 0)`, `element vertex ${kept}`, ...names.map((n) => `property float ${n}`), "end_header"].join("\n") + "\n";
+    yield new TextEncoder().encode(head);
+    const ROWS = 4e5;
+    let buf = new Float32Array(Math.min(kept, ROWS) * 17), o = 0, done = 0;
+    const chunks = [];
+    sp.forEachSplat((i, c, sc, q, op, col) => {
+      if (mask[i]) return;
+      const a = Math.min(1 - 1e-4, Math.max(1e-4, er.orig ? er.kind === "packed" ? er.orig[i] / 255 : op : op));
+      buf[o] = c.x + off[0];
+      buf[o + 1] = c.y + off[1];
+      buf[o + 2] = c.z + off[2];
+      buf[o + 3] = buf[o + 4] = buf[o + 5] = 0;
+      buf[o + 6] = (col.r - 0.5) / SH_C0;
+      buf[o + 7] = (col.g - 0.5) / SH_C0;
+      buf[o + 8] = (col.b - 0.5) / SH_C0;
+      buf[o + 9] = Math.log(a / (1 - a));
+      buf[o + 10] = Math.log(Math.max(sc.x, 1e-9));
+      buf[o + 11] = Math.log(Math.max(sc.y, 1e-9));
+      buf[o + 12] = Math.log(Math.max(sc.z, 1e-9));
+      buf[o + 13] = q.w;
+      buf[o + 14] = q.x;
+      buf[o + 15] = q.y;
+      buf[o + 16] = q.z;
+      o += 17;
+      done++;
+      if (o === buf.length) {
+        chunks.push(new Uint8Array(buf.buffer));
+        buf = new Float32Array(Math.min(kept - done, ROWS) * 17);
+        o = 0;
+      }
+    });
+    if (o > 0) chunks.push(new Uint8Array(buf.buffer, 0, o * 4));
+    for (let k = 0; k < chunks.length; k++) {
+      yield chunks[k];
+      if (onProgress) onProgress((k + 1) / chunks.length);
+    }
+  }
+  function upAxisAscii() {
+    const u = camera.up;
+    const m = { "1,0,0": "x", "-1,0,0": "-x", "0,1,0": "y", "0,-1,0": "-y", "0,0,1": "z", "0,0,-1": "-z" };
+    return m[[u.x, u.y, u.z].map((q) => Math.abs(q) < 1e-9 ? 0 : q).join(",")] || null;
+  }
+  async function cleanedBlob(forceFallback, onProgress) {
+    const parts = [];
+    const gen = !forceFallback && canExactSave() ? cleanedPlyChunks : splatsPlyChunks;
+    for await (const c of gen(onProgress)) parts.push(c);
+    return new Blob(parts, { type: "application/octet-stream" });
+  }
+  async function saveCleaned(name, withSide) {
+    const er = state.er, exact = canExactSave(), gen = exact ? cleanedPlyChunks : splatsPlyChunks;
+    const prog = (f) => {
+      const el = $("#sv-progress");
+      if (el) el.textContent = `\uC800\uC7A5 \uC911\u2026 ${(f * 100).toFixed(0)} %`;
+    };
+    let handle = null;
+    if (window.showSaveFilePicker) {
+      try {
+        handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: "3DGS PLY", accept: { "application/octet-stream": [".ply"] } }] });
+        name = handle.name || name;
+      } catch (e) {
+        if (e && e.name === "AbortError") return false;
+        handle = null;
+      }
+    }
+    try {
+      if (handle) {
+        const w = await handle.createWritable();
+        for await (const c of gen(prog)) await w.write(c);
+        await w.close();
+      } else {
+        const parts = [];
+        for await (const c of gen(prog)) parts.push(c);
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob(parts, { type: "application/octet-stream" }));
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 6e4);
+      }
+    } catch (e) {
+      console.error(e);
+      showError("E17", `\uC0C1\uC138: ${String(e && e.message || e).slice(0, 160)}`);
+      return false;
+    }
+    if (withSide) download(`${name}.json`, JSON.stringify({ units: state.unit.factor === 1 ? "m" : "model", scale_to_meters: state.unit.factor, scale_sigma_rel: state.unit.sigmaRel || 0, transform: state.unit.transform || void 0, crs: state.unit.crs || void 0, up_axis: upAxisAscii() || void 0, unit_source: state.unit.source, cleaned_from: { name: state.file.name, size: state.file.size, removed: er.count, total: er.mask.length }, generated_by: "3DGS \uB2E4\uC2DC\uC810 \uAC70\uB9AC \uCE21\uC815\uAE30 (\uC9C0\uC6B0\uAC1C)", when: (/* @__PURE__ */ new Date()).toISOString() }, null, 2), "application/json");
+    er.savedAt = { len: er.undo.length, top: er.undo.length ? er.undo[er.undo.length - 1] : null };
+    er.saved = true;
+    updateEraserUI();
+    updateCheckDot();
+    toast(`<b>\uC800\uC7A5 \uC644\uB8CC</b> ${name}<br>\uB0A8\uC740 \uAC00\uC6B0\uC2DC\uC548 ${(er.mask.length - er.count).toLocaleString()}\uAC1C (\uC9C0\uC6C0 ${er.count.toLocaleString()}\uAC1C)${exact ? "" : " \xB7 SH 0\uCC28 PLY \uB85C \uBCC0\uD658 \uC800\uC7A5"}`, "good", 8e3);
+    return true;
+  }
+  function openSaveCleaned() {
+    const er = state.er;
+    if (!er || !er.count) {
+      toast("\uC9C0\uC6B4 \uAC83\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uBA3C\uC800 \uC9C0\uC6B0\uAC1C\uB85C \uC9C0\uC6B8 \uBD80\uBD84\uC744 \uBB38\uC9C0\uB974\uC138\uC694.", "warn", 4e3);
+      return;
+    }
+    const exact = canExactSave(), N = er.mask.length, name = `${state.file.name.replace(/\.[^.]+$/, "")}_cleaned.ply`;
+    const side = state.unit.known && !/PLY 헤더/.test(state.unit.source);
+    openModal(`<h2>\u{1F4BE} \uC9C0\uC6B4 \uACB0\uACFC \uC800\uC7A5</h2>
+  <div class="kv"><span>\uC6D0\uBCF8</span><b>${state.file.name} \xB7 \uAC00\uC6B0\uC2DC\uC548 ${N.toLocaleString()}\uAC1C</b><span>\uC9C0\uC6C0</span><b>${er.count.toLocaleString()}\uAC1C (${(100 * er.count / N).toFixed(2)} %)</b><span>\uB0A8\uC74C</span><b>${(N - er.count).toLocaleString()}\uAC1C \xB7 \uC57D ${(state.file.size * (N - er.count) / N / 1e6).toFixed(1)} MB</b></div>
+  <p class="small">${exact ? "\uC6D0\uBCF8 PLY \uC5D0\uC11C <b>\uC9C0\uC6B4 \uAC00\uC6B0\uC2DC\uC548\uC758 \uD589\uB9CC \uBE7C\uACE0, \uB098\uBA38\uC9C0\uB294 \uD55C \uBC14\uC774\uD2B8\uB3C4 \uBC14\uAFB8\uC9C0 \uC54A\uACE0</b> \uC0C8 \uD30C\uC77C\uB85C \uC800\uC7A5\uD569\uB2C8\uB2E4(\uC88C\uD45C\xB7\uC0C9\xB7\uC2DC\uC810 \uC758\uC874 \uC0C9(SH)\xB7\uD5E4\uB354 \uC8FC\uC11D \uADF8\uB300\uB85C). <b>\uC6D0\uBCF8 \uD30C\uC77C\uC740 \uBC14\uB00C\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.</b>" : "\uC774 \uD615\uC2DD\uC740 \uC6D0\uBCF8 \uADF8\uB300\uB85C \uC800\uC7A5\uD560 \uC218 \uC5C6\uC5B4 <b>3DGS PLY (SH 0\uCC28)</b>\uB85C \uBC14\uAFD4 \uC800\uC7A5\uD569\uB2C8\uB2E4. \uC2DC\uC810\uC5D0 \uB530\uB77C \uBCC0\uD558\uB294 \uC0C9 \uC131\uBD84\uC740 \uBE60\uC9C0\uACE0 \uC88C\uD45C \uC815\uBC00\uB3C4\uAC00 \uC870\uAE08 \uB0AE\uC544\uC9C8 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uC6D0\uBCF8 \uD30C\uC77C\uC740 \uBC14\uB00C\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4."}</p>
+  <div class="form-row"><label>\uD30C\uC77C \uC774\uB984</label><input id="sv-name" type="text" value="${name}" style="flex:1;min-width:260px"></div>
+  ${side ? '<label class="field check"><input id="sv-side" type="checkbox" checked> \uCD95\uCC99\xB7\uC88C\uD45C \uC815\uBCF4(JSON)\uB3C4 \uD568\uAED8 \uC800\uC7A5 <span class="muted small">(\uC0C8 \uD30C\uC77C\uC740 \uC774\uB984\uC774 \uB2EC\uB77C \uBE0C\uB77C\uC6B0\uC800\uC5D0 \uAE30\uC5B5\uB41C \uCD95\uCC99\uC774 \uC790\uB3D9 \uC801\uC6A9\uB418\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC774 JSON \uC744 \uC0C8 PLY \uC640 \uD568\uAED8 \uB193\uC73C\uBA74 \uADF8\uB300\uB85C \uC801\uC6A9\uB429\uB2C8\uB2E4)</span></label>' : ""}
+  <div class="btnrow"><button class="btn primary" id="sv-go">\u{1F4BE} \uC800\uC7A5</button><button class="btn ghost" id="sv-cancel">\uCDE8\uC18C</button></div><div id="sv-progress" class="muted small"></div>`);
+    $("#sv-cancel").onclick = closeModal;
+    $("#sv-go").onclick = async () => {
+      let nm = ($("#sv-name").value || name).trim();
+      if (!/\.ply$/i.test(nm)) nm += ".ply";
+      const ws = !!($("#sv-side") && $("#sv-side").checked);
+      $("#sv-go").disabled = true;
+      const ok = await saveCleaned(nm, ws);
+      if (ok) closeModal();
+      else if ($("#sv-go")) $("#sv-go").disabled = false;
+    };
+  }
+  window.addEventListener("beforeunload", (e) => {
+    if (state.er && state.er.count && !state.er.saved) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
   function openChecklist() {
     const items = [];
     const it = (st, title, body, fix = "") => items.push({ st, title, body, fix });
@@ -59141,6 +59907,7 @@ void main() {
       }
     }
     if (state.cloud) it("ok", "\uC810\uAD70", `\uAC00\uC6B0\uC2DC\uC548 \uC911\uC2EC ${state.cloud.n.toLocaleString()}\uC810 \xB7 \uBCF4\uAE30 ${state.settings.viewMode} \xB7 1\uD074\uB9AD \uBC29\uC2DD ${state.settings.pickMode === "nearest" ? "\uAC00\uC7A5 \uAC00\uAE4C\uC6B4 \uC810" : "\uAD70\uC9D1 \uC911\uC559\uAC12"} \xB7 \uC6D0\uBFD4 ${state.settings.pickRadius} px`);
+    if (state.er && state.er.count) it(state.er.saved ? "ok" : "warn", "\uC9C0\uC6B0\uAC1C", `\uC9C0\uC6B4 \uAC00\uC6B0\uC2DC\uC548 ${state.er.count.toLocaleString()} / ${state.er.mask.length.toLocaleString()} \xB7 ${state.er.saved ? "\uC800\uC7A5\uB428" : "\uC800\uC7A5 \uC548 \uB428 \u2014 [\u{1F9FD} \uC9C0\uC6B0\uAC1C] \u2192 [\u{1F4BE} \uC9C0\uC6B4 \uACB0\uACFC \uC800\uC7A5]"}`, state.er.saved ? "" : "\uC9C0\uC6B4 \uAC83\uC740 \uD654\uBA74\uC5D0\uC11C\uB9CC \uC228\uACA8\uC9C4 \uC0C1\uD0DC\uC785\uB2C8\uB2E4. \uD30C\uC77C\uB85C \uB0A8\uAE30\uB824\uBA74 \uC800\uC7A5\uD558\uC138\uC694(\uC6D0\uBCF8\uC740 \uBC14\uB00C\uC9C0 \uC54A\uC74C).");
     it(state.points.length ? "ok" : "na", "\uACB0\uACFC", `\uC810 ${state.points.length}\uAC1C \xB7 \uAC70\uB9AC ${state.dists.length}\uAC1C${state.points.length && !state.unit.known ? " \xB7 \u26A0 \uBAA8\uB450 \uBAA8\uB378 \uB2E8\uC704" : ""}`);
     openModal(`<h2>\uC815\uBCF4 \uC810\uAC80</h2><p class="muted small">\uCE21\uC815\uC5D0 \uD544\uC694\uD55C \uC815\uBCF4\uAC00 \uAC16\uCDB0\uC84C\uB294\uC9C0 \uD655\uC778\uD569\uB2C8\uB2E4. \uBE68\uAC15\uC740 \uC9C4\uD589 \uBD88\uAC00, \uB178\uB791\uC740 \uACB0\uACFC\uC5D0 \uC81C\uD55C\uC774 \uC788\uC74C\uC744 \uB73B\uD569\uB2C8\uB2E4.</p><ul class="checklist">${items.map((x) => `<li><span class="st ${x.st}">${{ ok: "\u2713", warn: "!", bad: "\u2715", na: "\u2013" }[x.st]}</span><span class="body"><b>${x.title}</b>${x.body}${x.fix ? `<div class="fix">\u{1F449} ${x.fix}</div>` : ""}</span></li>`).join("")}</ul>`);
   }
@@ -59517,6 +60284,52 @@ void main() {
   $("#btn-point").onclick = () => state.task?.kind === "point" ? endTask() : startTask("point");
   $("#btn-dist").onclick = () => state.task?.kind === "distance" ? endTask() : startTask("distance");
   $("#btn-home").onclick = frameAll;
+  $("#btn-eraser").onclick = () => setEraser(!state.eraser);
+  $("#er-exit").onclick = () => setEraser(false);
+  $("#er-undo").onclick = erUndo;
+  $("#er-redo").onclick = erRedo;
+  $("#er-mini-undo").onclick = erUndo;
+  $("#er-mini-redo").onclick = erRedo;
+  $("#er-hist").onclick = (e) => {
+    const li = e.target.closest("li[data-pos]");
+    if (li) erJump(+li.dataset.pos);
+  };
+  $("#er-reset").onclick = erRestoreAll;
+  $("#er-save").onclick = openSaveCleaned;
+  $("#er-size").oninput = (e) => setSetting("erSize", +e.target.value);
+  $("#er-big").oninput = (e) => {
+    state.settings.erMode = "big";
+    setSetting("erBig", +e.target.value);
+  };
+  $("#er-layers").oninput = (e) => {
+    state.settings.erMode = "multi";
+    setSetting("erLayers", +e.target.value);
+  };
+  $$("input[name=ermode]").forEach((r) => r.onchange = (e) => setSetting("erMode", e.target.value));
+  document.addEventListener("pointerdown", (e) => {
+    if (!state.eraser || e.button !== 0 || e.target !== renderer?.domElement) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    erDown(e.clientX - r.left, e.clientY - r.top);
+    try {
+      renderer.domElement.setPointerCapture(e.pointerId);
+    } catch (_) {
+    }
+  });
+  document.addEventListener("pointermove", (e) => {
+    if (state.eraser && state.er && state.er.down) {
+      const r = renderer.domElement.getBoundingClientRect();
+      state.er.pending = { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+  });
+  document.addEventListener("pointerup", (e) => {
+    if (state.er && state.er.down && e.button === 0) erUp();
+  });
+  document.addEventListener("pointercancel", () => {
+    if (state.er && state.er.down) erUp();
+  });
+  window.addEventListener("blur", () => {
+    if (state.er && state.er.down) erUp();
+  });
   $("#btn-up").onclick = (e) => {
     e.stopPropagation();
     $("#btn-up").parentElement.classList.toggle("open");
@@ -59686,6 +60499,7 @@ void main() {
     $("#set-dunit").value = st.dunit;
     $("#set-hires").checked = st.loupeHiRes;
     $("#set-autorot").checked = st.autoRotate;
+    updateEraserUI();
     $("#set-navpad").checked = st.navpad;
     $("#set-navstep").value = st.navStep;
     $("#set-ptsize").value = st.ptSize;
@@ -59804,6 +60618,44 @@ void main() {
       return;
     }
     const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "y") && state.er && (state.eraser || !state.task && (state.er.undo.length || state.er.redo.length))) {
+      e.preventDefault();
+      if (k === "y" || e.shiftKey) erRedo();
+      else erUndo();
+      return;
+    }
+    if (state.eraser) {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && k === "s") {
+        e.preventDefault();
+        openSaveCleaned();
+        return;
+      }
+      if (e.key === "[" || e.key === "]") {
+        setSetting("erSize", Math.max(5, Math.min(150, state.settings.erSize + (e.key === "]" ? 5 : -5))));
+        return;
+      }
+      if (e.key === "Escape") {
+        setEraser(false);
+        return;
+      }
+      if (!mod && !e.altKey && /^[0-9]$/.test(e.key)) {
+        const d = +e.key;
+        if (d >= 2) state.settings.erLayers = d;
+        setSetting("erMode", d === 0 ? "all" : d === 1 ? "front" : "multi");
+        toast(`\uC9C0\uC6B0\uB294 \uAE4A\uC774: <strong>${erModeName()}</strong>`, "info", 1500).classList.add("passive");
+        return;
+      }
+      if (!mod && k === "b") {
+        setSetting("erMode", "big");
+        toast(`\uC9C0\uC6B0\uB294 \uAE4A\uC774: <strong>${erModeName()}</strong>`, "info", 1500).classList.add("passive");
+        return;
+      }
+    }
+    if (k === "e" && state.mesh && !e.ctrlKey && !e.metaKey) {
+      setEraser(!state.eraser);
+      return;
+    }
     if (k === "u" && state.mesh) {
       flipUp();
       return;
@@ -59924,6 +60776,25 @@ void main() {
     autoRotate,
     autoOrbit,
     origCoord,
+    setEraser,
+    eraseAt,
+    erUndo,
+    erRedo,
+    erRestoreAll,
+    erJump,
+    cleanedBlob,
+    canExactSave,
+    openSaveCleaned,
+    eraseStroke(pts) {
+      erDown(pts[0][0], pts[0][1]);
+      eraseTick();
+      for (let q = 1; q < pts.length; q++) {
+        state.er.pending = { x: pts[q][0], y: pts[q][1] };
+        eraseTick();
+      }
+      erUp();
+      return state.er.count;
+    },
     flipUp,
     estimateUpFromData,
     checkPole,
